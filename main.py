@@ -29,14 +29,30 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # 시작시 데이터베이스 초기화
 @app.on_event("startup")
 async def startup_event():
-    create_tables()
-    init_db()
-    print("🚀 네이버 리뷰 관리 시스템이 시작되었습니다!")
+    try:
+        create_tables()
+        init_db()
+        print("🚀 네이버 리뷰 관리 시스템이 시작되었습니다!")
+    except Exception as e:
+        print(f"⚠️ 데이터베이스 초기화 오류: {e}")
+        print("애플리케이션은 계속 실행됩니다...")
 
 # 메인 페이지
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return FileResponse("templates/index.html" if os.path.exists("templates/index.html") else "static/index.html")
+    if os.path.exists("templates/index.html"):
+        return FileResponse("templates/index.html")
+    else:
+        return HTMLResponse(content="""
+        <html>
+            <head><title>네이버 리뷰 관리 시스템</title></head>
+            <body>
+                <h1>🚀 네이버 리뷰 관리 시스템</h1>
+                <p>시스템이 정상적으로 실행 중입니다!</p>
+                <p><a href="/docs">API 문서 보기</a></p>
+            </body>
+        </html>
+        """)
 
 # 인증 라우터
 @app.post("/auth/login", response_model=Token)
