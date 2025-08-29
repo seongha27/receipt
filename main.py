@@ -12,7 +12,14 @@ from database import get_db, create_tables, init_db
 from models import User, Store, Review, Company, StoreReviewerAssignment, UserRole, ReviewStatus
 from schemas import *
 from auth import *
-from review_extractor import extract_naver_review
+try:
+    from review_extractor import extract_naver_review
+    CHROME_AVAILABLE = True
+except Exception as e:
+    print(f"Chrome 기반 추출기 로드 실패: {e}")
+    from simple_review_extractor import extract_naver_review_simple as extract_naver_review
+    CHROME_AVAILABLE = False
+    print("간단한 추출기를 사용합니다")
 
 # FastAPI 앱 생성
 app = FastAPI(
