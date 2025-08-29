@@ -1,0 +1,14 @@
+[phases.setup]
+aptPkgs = ["...", "chromium", "chromium-driver"]
+
+[phases.build]
+cmds = [
+    "pip install -r requirements.txt"
+]
+
+[start]
+cmd = "python main.py"
+
+[variables]
+GOOGLE_CHROME_BIN = "/usr/bin/chromium"
+CHROMEDRIVER_PATH = "/usr/bin/chromedriver"

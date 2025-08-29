@@ -22,21 +22,32 @@ class NaverReviewExtractor:
             options = webdriver.ChromeOptions()
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_argument('--disable-gpu')
             options.add_argument('--headless')  # 서버 배포시 필요
+            options.add_argument('--remote-debugging-port=9222')
+            options.add_argument('--disable-blink-features=AutomationControlled')
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option('useAutomationExtension', False)
             
-            # Heroku/Railway 등에서 ChromeDriver 경로 설정
-            chrome_driver_path = os.getenv('CHROMEDRIVER_PATH', 'chromedriver')
+            # Railway/Render 등에서 Chrome 바이너리 경로 설정
+            chrome_binary = os.getenv('GOOGLE_CHROME_BIN')
+            if chrome_binary:
+                options.binary_location = chrome_binary
             
-            self.driver = webdriver.Chrome(options=options)
+            # ChromeDriver 경로 설정
+            chrome_driver_path = os.getenv('CHROMEDRIVER_PATH')
+            if chrome_driver_path:
+                self.driver = webdriver.Chrome(executable_path=chrome_driver_path, options=options)
+            else:
+                self.driver = webdriver.Chrome(options=options)
+                
             self.driver.implicitly_wait(5)
             
             logger.info("셀레니움 드라이버 설정 완료")
             return True
         except Exception as e:
             logger.error(f"셀레니움 드라이버 설정 실패: {str(e)}")
+            logger.warning("Chrome이 설치되지 않은 환경에서는 리뷰 추출 기능을 사용할 수 없습니다")
             return False
 
     def extract_direct_review(self, url: str) -> Tuple[str, str]:
