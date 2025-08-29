@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: naver-review-webapp
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: naver-review-db
+          property: connectionString
+    autoDeploy: false
+
+databases:
+  - name: naver-review-db
+    databaseName: naver_review_system
+    user: naver_review_user

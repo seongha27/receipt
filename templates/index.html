@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>네이버 리뷰 관리 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .sidebar-active { transform: translateX(0); }
+        .sidebar-inactive { transform: translateX(-100%); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app" v-cloak>
+        <!-- 로딩 오버레이 -->
+        <div v-if="loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white p-6 rounded-lg">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p class="mt-4 text-gray-600">처리중...</p>
+            </div>
+        </div>
+
+        <!-- 헤더 -->
+        <header class="bg-blue-600 text-white shadow-lg">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-6">
+                    <div class="flex items-center">
+                        <h1 class="text-2xl font-bold">네이버 리뷰 관리 시스템</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <span v-if="user" class="text-blue-100">{{ user.full_name || user.username }}님</span>
+                        <span v-if="user" class="px-2 py-1 bg-blue-500 rounded text-xs">{{ user.role === 'admin' ? '관리자' : '리뷰어' }}</span>
+                        <button v-if="user" @click="logout" class="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded">
+                            로그아웃
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 로그인 폼 -->
+        <div v-if="!user" class="min-h-screen flex items-center justify-center">
+            <div class="max-w-md w-full bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold text-center mb-6">로그인</h2>
+                <form @submit.prevent="login">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">
+                            사용자명
+                        </label>
+                        <input v-model="loginForm.username" type="text" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">
+                            비밀번호
+                        </label>
+                        <input v-model="loginForm.password" type="password" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">
+                        로그인
+                    </button>
+                </form>
+                <div class="mt-4 text-sm text-gray-600 text-center">
+                    <p>테스트 계정: admin / admin123</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 메인 대시보드 -->
+        <div v-if="user" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            
+            <!-- 탭 네비게이션 -->
+            <div class="mb-8">
+                <div class="border-b border-gray-200">
+                    <nav class="-mb-px flex space-x-8">
+                        <button @click="activeTab = 'dashboard'" 
+                                :class="activeTab === 'dashboard' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                                class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                            대시보드
+                        </button>
+                        <button @click="activeTab = 'reviews'" 
+                                :class="activeTab === 'reviews' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                                class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                            리뷰 관리
+                        </button>
+                        <button v-if="user.role === 'admin'" @click="activeTab = 'stores'" 
+                                :class="activeTab === 'stores' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                                class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                            업체 관리
+                        </button>
+                        <button v-if="user.role === 'admin'" @click="activeTab = 'users'" 
+                                :class="activeTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                                class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                            사용자 관리
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- 대시보드 탭 -->
+            <div v-if="activeTab === 'dashboard'" class="space-y-6">
+                <!-- 통계 카드 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
+                                        <span class="text-white text-sm font-bold">총</span>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 truncate">총 리뷰</dt>
+                                        <dd class="text-lg font-medium text-gray-900">{{ stats.total_reviews || 0 }}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-yellow-500 rounded flex items-center justify-center">
+                                        <span class="text-white text-sm font-bold">대기</span>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 truncate">처리 대기</dt>
+                                        <dd class="text-lg font-medium text-gray-900">{{ stats.pending_reviews || 0 }}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-green-500 rounded flex items-center justify-center">
+                                        <span class="text-white text-sm font-bold">완료</span>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 truncate">처리 완료</dt>
+                                        <dd class="text-lg font-medium text-gray-900">{{ stats.completed_reviews || 0 }}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-5">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-red-500 rounded flex items-center justify-center">
+                                        <span class="text-white text-sm font-bold">실패</span>
+                                    </div>
+                                </div>
+                                <div class="ml-5 w-0 flex-1">
+                                    <dl>
+                                        <dt class="text-sm font-medium text-gray-500 truncate">처리 실패</dt>
+                                        <dd class="text-lg font-medium text-gray-900">{{ stats.failed_reviews || 0 }}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 빠른 작업 -->
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">빠른 작업</h3>
+                    <div class="flex space-x-4">
+                        <button @click="activeTab = 'reviews'; showReviewForm = true" 
+                                class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            새 리뷰 등록
+                        </button>
+                        <button v-if="user.role === 'admin'" @click="processAllPendingReviews" 
+                                class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                            모든 대기 리뷰 처리
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 리뷰 관리 탭 -->
+            <div v-if="activeTab === 'reviews'" class="space-y-6">
+                <!-- 리뷰 등록 폼 -->
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">리뷰 등록</h3>
+                        <button @click="showReviewForm = !showReviewForm" 
+                                class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            {{ showReviewForm ? '폼 숨기기' : '새 리뷰 등록' }}
+                        </button>
+                    </div>
+                    
+                    <form v-if="showReviewForm" @submit.prevent="submitReview" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">업체 선택</label>
+                            <select v-model="reviewForm.store_id" required 
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">업체를 선택하세요</option>
+                                <option v-for="store in stores" :key="store.id" :value="store.id">
+                                    {{ store.name }}
+                                </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">리뷰 URL</label>
+                            <input v-model="reviewForm.review_url" type="url" required placeholder="https://naver.me/... 또는 https://m.place.naver.com/my/review/..."
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            <p class="mt-1 text-xs text-gray-500">두 가지 형식 모두 지원: 단축 URL (naver.me) 또는 직접 링크</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                                등록
+                            </button>
+                            <button @click="showReviewForm = false" type="button" 
+                                    class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                                취소
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 리뷰 목록 -->
+                <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-medium text-gray-900">리뷰 목록</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">업체명</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL 타입</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">등록일</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">작업</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr v-for="review in reviews" :key="review.id">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {{ getStoreName(review.store_id) }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <span :class="review.url_type === 'direct' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'" 
+                                              class="px-2 py-1 text-xs font-medium rounded-full">
+                                            {{ review.url_type === 'direct' ? '직접 링크' : '단축 URL' }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span :class="getStatusColor(review.status)" class="px-2 py-1 text-xs font-medium rounded-full">
+                                            {{ getStatusText(review.status) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {{ formatDate(review.created_at) }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                        <button v-if="review.status === 'pending'" @click="processReview(review.id)" 
+                                                class="text-blue-600 hover:text-blue-900">처리</button>
+                                        <button @click="viewReviewDetail(review)" 
+                                                class="text-green-600 hover:text-green-900">상세</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div v-if="reviews.length === 0" class="text-center py-8 text-gray-500">
+                            등록된 리뷰가 없습니다.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 업체 관리 탭 (관리자만) -->
+            <div v-if="activeTab === 'stores' && user.role === 'admin'" class="space-y-6">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">업체 관리</h3>
+                    <button @click="showStoreForm = !showStoreForm" 
+                            class="mb-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                        {{ showStoreForm ? '폼 숨기기' : '새 업체 등록' }}
+                    </button>
+                    
+                    <form v-if="showStoreForm" @submit.prevent="submitStore" class="space-y-4 mb-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">업체명</label>
+                            <input v-model="storeForm.name" type="text" required 
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">설명</label>
+                            <textarea v-model="storeForm.description" rows="3"
+                                      class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">위치</label>
+                            <input v-model="storeForm.location" type="text" 
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="flex space-x-2">
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">등록</button>
+                            <button @click="showStoreForm = false" type="button" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">취소</button>
+                        </div>
+                    </form>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div v-for="store in stores" :key="store.id" class="border border-gray-200 rounded-lg p-4">
+                            <h4 class="font-medium text-gray-900">{{ store.name }}</h4>
+                            <p class="text-sm text-gray-500 mt-1">{{ store.description || '설명 없음' }}</p>
+                            <p class="text-sm text-gray-500">{{ store.location || '위치 정보 없음' }}</p>
+                            <div class="mt-2 text-xs text-gray-400">
+                                등록일: {{ formatDate(store.created_at) }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 사용자 관리 탭 (관리자만) -->
+            <div v-if="activeTab === 'users' && user.role === 'admin'" class="space-y-6">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">사용자 관리</h3>
+                    <button @click="showUserForm = !showUserForm" 
+                            class="mb-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                        {{ showUserForm ? '폼 숨기기' : '새 사용자 등록' }}
+                    </button>
+                    
+                    <form v-if="showUserForm" @submit.prevent="submitUser" class="space-y-4 mb-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">사용자명</label>
+                            <input v-model="userForm.username" type="text" required 
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">이메일</label>
+                            <input v-model="userForm.email" type="email" required 
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">이름</label>
+                            <input v-model="userForm.full_name" type="text" 
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">역할</label>
+                            <select v-model="userForm.role" required 
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                <option value="reviewer">리뷰어</option>
+                                <option value="admin">관리자</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">비밀번호</label>
+                            <input v-model="userForm.password" type="password" required 
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="flex space-x-2">
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">등록</button>
+                            <button @click="showUserForm = false" type="button" class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">취소</button>
+                        </div>
+                    </form>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사용자명</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">이메일</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">이름</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">역할</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">등록일</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr v-for="u in users" :key="u.id">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ u.username }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ u.email }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ u.full_name || '-' }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span :class="u.role === 'admin' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'" 
+                                              class="px-2 py-1 text-xs font-medium rounded-full">
+                                            {{ u.role === 'admin' ? '관리자' : '리뷰어' }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatDate(u.created_at) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 리뷰 상세 모달 -->
+        <div v-if="selectedReview" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" @click="selectedReview = null">
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white" @click.stop>
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">리뷰 상세 정보</h3>
+                        <button @click="selectedReview = null" class="text-gray-400 hover:text-gray-600">
+                            <span class="sr-only">닫기</span>
+                            ✕
+                        </button>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">업체명</label>
+                            <p class="mt-1 text-sm text-gray-900">{{ getStoreName(selectedReview.store_id) }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">리뷰 URL</label>
+                            <p class="mt-1 text-sm text-blue-600 break-all">
+                                <a :href="selectedReview.review_url" target="_blank" class="hover:underline">{{ selectedReview.review_url }}</a>
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">상태</label>
+                            <span :class="getStatusColor(selectedReview.status)" class="mt-1 inline-block px-2 py-1 text-xs font-medium rounded-full">
+                                {{ getStatusText(selectedReview.status) }}
+                            </span>
+                        </div>
+                        <div v-if="selectedReview.extracted_review_text">
+                            <label class="block text-sm font-medium text-gray-700">추출된 리뷰 내용</label>
+                            <p class="mt-1 text-sm text-gray-900 p-3 bg-gray-50 rounded">{{ selectedReview.extracted_review_text }}</p>
+                        </div>
+                        <div v-if="selectedReview.extracted_receipt_date">
+                            <label class="block text-sm font-medium text-gray-700">영수증 날짜</label>
+                            <p class="mt-1 text-sm text-gray-900">{{ selectedReview.extracted_receipt_date }}</p>
+                        </div>
+                        <div v-if="selectedReview.error_message">
+                            <label class="block text-sm font-medium text-gray-700">오류 메시지</label>
+                            <p class="mt-1 text-sm text-red-600 p-3 bg-red-50 rounded">{{ selectedReview.error_message }}</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 text-sm text-gray-500">
+                            <div>
+                                <label class="block font-medium">등록일</label>
+                                <p>{{ formatDate(selectedReview.created_at) }}</p>
+                            </div>
+                            <div v-if="selectedReview.processed_at">
+                                <label class="block font-medium">처리일</label>
+                                <p>{{ formatDate(selectedReview.processed_at) }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    user: null,
+                    token: localStorage.getItem('token'),
+                    loading: false,
+                    activeTab: 'dashboard',
+                    
+                    // 로그인
+                    loginForm: {
+                        username: '',
+                        password: ''
+                    },
+                    
+                    // 통계
+                    stats: {},
+                    
+                    // 리뷰
+                    reviews: [],
+                    reviewForm: {
+                        store_id: '',
+                        review_url: ''
+                    },
+                    showReviewForm: false,
+                    selectedReview: null,
+                    
+                    // 업체
+                    stores: [],
+                    storeForm: {
+                        name: '',
+                        description: '',
+                        location: ''
+                    },
+                    showStoreForm: false,
+                    
+                    // 사용자
+                    users: [],
+                    userForm: {
+                        username: '',
+                        email: '',
+                        full_name: '',
+                        role: 'reviewer',
+                        password: ''
+                    },
+                    showUserForm: false
+                }
+            },
+            
+            async mounted() {
+                if (this.token) {
+                    await this.getCurrentUser();
+                }
+            },
+            
+            methods: {
+                async apiRequest(url, options = {}) {
+                    const config = {
+                        ...options,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(this.token && { 'Authorization': `Bearer ${this.token}` }),
+                            ...options.headers
+                        }
+                    };
+                    
+                    try {
+                        const response = await axios(url, config);
+                        return response.data;
+                    } catch (error) {
+                        if (error.response?.status === 401) {
+                            this.logout();
+                        }
+                        throw error;
+                    }
+                },
+                
+                async login() {
+                    this.loading = true;
+                    try {
+                        const formData = new FormData();
+                        formData.append('username', this.loginForm.username);
+                        formData.append('password', this.loginForm.password);
+                        
+                        const response = await axios.post('/auth/login', formData);
+                        this.token = response.data.access_token;
+                        localStorage.setItem('token', this.token);
+                        
+                        await this.getCurrentUser();
+                    } catch (error) {
+                        alert('로그인에 실패했습니다: ' + (error.response?.data?.detail || '알 수 없는 오류'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async getCurrentUser() {
+                    try {
+                        this.user = await this.apiRequest('/auth/me');
+                        await this.loadDashboardData();
+                    } catch (error) {
+                        console.error('사용자 정보 로드 실패:', error);
+                        this.logout();
+                    }
+                },
+                
+                logout() {
+                    this.user = null;
+                    this.token = null;
+                    localStorage.removeItem('token');
+                },
+                
+                async loadDashboardData() {
+                    try {
+                        this.stats = await this.apiRequest('/dashboard/stats');
+                        await this.loadStores();
+                        await this.loadReviews();
+                        if (this.user.role === 'admin') {
+                            await this.loadUsers();
+                        }
+                    } catch (error) {
+                        console.error('대시보드 데이터 로드 실패:', error);
+                    }
+                },
+                
+                async loadReviews() {
+                    try {
+                        this.reviews = await this.apiRequest('/reviews/');
+                    } catch (error) {
+                        console.error('리뷰 목록 로드 실패:', error);
+                    }
+                },
+                
+                async loadStores() {
+                    try {
+                        this.stores = await this.apiRequest('/stores/');
+                    } catch (error) {
+                        console.error('업체 목록 로드 실패:', error);
+                    }
+                },
+                
+                async loadUsers() {
+                    try {
+                        this.users = await this.apiRequest('/users/');
+                    } catch (error) {
+                        console.error('사용자 목록 로드 실패:', error);
+                    }
+                },
+                
+                async submitReview() {
+                    this.loading = true;
+                    try {
+                        await this.apiRequest('/reviews/', {
+                            method: 'POST',
+                            data: this.reviewForm
+                        });
+                        
+                        this.reviewForm = { store_id: '', review_url: '' };
+                        this.showReviewForm = false;
+                        await this.loadReviews();
+                        await this.loadDashboardData();
+                        alert('리뷰가 성공적으로 등록되었습니다!');
+                    } catch (error) {
+                        alert('리뷰 등록 실패: ' + (error.response?.data?.detail || '알 수 없는 오류'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async submitStore() {
+                    this.loading = true;
+                    try {
+                        await this.apiRequest('/stores/', {
+                            method: 'POST',
+                            data: { ...this.storeForm, company_id: this.user.company_id }
+                        });
+                        
+                        this.storeForm = { name: '', description: '', location: '' };
+                        this.showStoreForm = false;
+                        await this.loadStores();
+                        alert('업체가 성공적으로 등록되었습니다!');
+                    } catch (error) {
+                        alert('업체 등록 실패: ' + (error.response?.data?.detail || '알 수 없는 오류'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async submitUser() {
+                    this.loading = true;
+                    try {
+                        await this.apiRequest('/users/', {
+                            method: 'POST',
+                            data: { ...this.userForm, company_id: this.user.company_id }
+                        });
+                        
+                        this.userForm = { username: '', email: '', full_name: '', role: 'reviewer', password: '' };
+                        this.showUserForm = false;
+                        await this.loadUsers();
+                        alert('사용자가 성공적으로 등록되었습니다!');
+                    } catch (error) {
+                        alert('사용자 등록 실패: ' + (error.response?.data?.detail || '알 수 없는 오류'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async processReview(reviewId) {
+                    this.loading = true;
+                    try {
+                        await this.apiRequest(`/reviews/${reviewId}/process`, {
+                            method: 'POST'
+                        });
+                        
+                        alert('리뷰 처리를 시작했습니다. 잠시 후 새로고침해주세요.');
+                        setTimeout(() => {
+                            this.loadReviews();
+                            this.loadDashboardData();
+                        }, 3000);
+                    } catch (error) {
+                        alert('리뷰 처리 실패: ' + (error.response?.data?.detail || '알 수 없는 오류'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async processAllPendingReviews() {
+                    if (!confirm('모든 대기중인 리뷰를 처리하시겠습니까?')) return;
+                    
+                    this.loading = true;
+                    try {
+                        const result = await this.apiRequest('/reviews/process-all', {
+                            method: 'POST'
+                        });
+                        
+                        alert(result.message);
+                        setTimeout(() => {
+                            this.loadReviews();
+                            this.loadDashboardData();
+                        }, 5000);
+                    } catch (error) {
+                        alert('일괄 처리 실패: ' + (error.response?.data?.detail || '알 수 없는 오류'));
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                viewReviewDetail(review) {
+                    this.selectedReview = review;
+                },
+                
+                getStoreName(storeId) {
+                    const store = this.stores.find(s => s.id === storeId);
+                    return store ? store.name : '알 수 없음';
+                },
+                
+                getStatusText(status) {
+                    const statusMap = {
+                        'pending': '대기중',
+                        'processing': '처리중',
+                        'completed': '완료',
+                        'failed': '실패'
+                    };
+                    return statusMap[status] || status;
+                },
+                
+                getStatusColor(status) {
+                    const colorMap = {
+                        'pending': 'bg-yellow-100 text-yellow-800',
+                        'processing': 'bg-blue-100 text-blue-800',
+                        'completed': 'bg-green-100 text-green-800',
+                        'failed': 'bg-red-100 text-red-800'
+                    };
+                    return colorMap[status] || 'bg-gray-100 text-gray-800';
+                },
+                
+                formatDate(dateString) {
+                    return new Date(dateString).toLocaleString('ko-KR');
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
