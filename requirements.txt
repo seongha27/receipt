@@ -1,13 +1,2 @@
 fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-python-multipart
-python-jose[cryptography]
-passlib[bcrypt]
-beautifulsoup4
-requests
-pydantic[email]
-python-dotenv
-Jinja2
-aiofiles
+uvicorn

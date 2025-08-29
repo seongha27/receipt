@@ -39,7 +39,7 @@ class User(UserBase):
     last_login: Optional[datetime] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserLogin(BaseModel):
     username: str
@@ -59,7 +59,7 @@ class Company(CompanyBase):
     is_active: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 업체 스키마
 class StoreBase(BaseModel):
@@ -85,7 +85,7 @@ class Store(StoreBase):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 리뷰 스키마
 class ReviewBase(BaseModel):
@@ -125,7 +125,7 @@ class Review(ReviewBase):
     updated_at: Optional[datetime] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 업체-리뷰어 할당 스키마
 class StoreReviewerAssignmentBase(BaseModel):
@@ -142,7 +142,7 @@ class StoreReviewerAssignment(StoreReviewerAssignmentBase):
     is_active: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 토큰 스키마
 class Token(BaseModel):
