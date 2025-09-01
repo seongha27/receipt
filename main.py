@@ -431,22 +431,17 @@ def company_page(company_name: str):
     cursor.execute('SELECT * FROM stores WHERE company_name = ? ORDER BY created_at DESC', (company_name,))
     stores = cursor.fetchall()
     
-    # 해당 고객사의 완료된 리뷰들
-    cursor.execute('''
-        SELECT r.* FROM reviews r
-        JOIN stores s ON r.store_name = s.name
-        WHERE s.company_name = ? AND r.status = "completed"
-        ORDER BY r.created_at DESC
-    ''', (company_name,))
-    completed_reviews = cursor.fetchall()
-    
-    # 전체 리뷰 (상태별 통계용)
+    # 해당 고객사의 모든 리뷰들 (추출 전도 포함)
     cursor.execute('''
         SELECT r.* FROM reviews r
         JOIN stores s ON r.store_name = s.name
         WHERE s.company_name = ?
+        ORDER BY r.created_at DESC
     ''', (company_name,))
     all_reviews = cursor.fetchall()
+    
+    # 완료된 리뷰만 (CSV 다운로드용)
+    completed_reviews = [r for r in all_reviews if r[5] == 'completed']
     
     conn.close()
     
@@ -471,16 +466,16 @@ def company_page(company_name: str):
                 end_date = ''
         
         total_target = (s[4] or 1) * (s[5] or 30)
-        store_completed = len([r for r in completed_reviews if r[1] == s[2]])
-        store_total = len([r for r in all_reviews if r[1] == s[2]])
-        percentage = round((store_completed / total_target) * 100) if total_target > 0 else 0
+        store_completed = len([r for r in all_reviews if r[1] == s[2] and r[5] == 'completed'])
+        store_registered = len([r for r in all_reviews if r[1] == s[2]])  # 등록된 모든 리뷰 (추출 성공/실패 무관)
+        percentage = round((store_registered / total_target) * 100) if total_target > 0 else 0
         
-        # 상태 판정
-        if store_completed >= total_target:
-            status = '완료'
+        # 상태 판정 (등록 갯수 기준)
+        if store_registered >= total_target:
+            status = '목표달성'
             status_color = '#28a745'
             card_class = 'completed-store'
-        elif store_total > 0:
+        elif store_registered > 0:
             status = '진행중'
             status_color = '#ffc107'
             card_class = 'progress-store'
@@ -506,8 +501,11 @@ def company_page(company_name: str):
             <div style="margin-bottom: 10px; color: #666; font-size: 14px;">
                 🎯 <strong>목표:</strong> {total_target}개 ({s[4] or 1}개/일 × {s[5] or 30}일)
             </div>
-            <div style="font-size: 20px; font-weight: bold; color: {status_color};">
-                📊 {store_completed}/{total_target} ({percentage}%)
+            <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold; color: {status_color};">
+                📊 등록: {store_registered}/{total_target} ({percentage}%)
+            </div>
+            <div style="font-size: 14px; color: #666;">
+                ✅ 추출완료: {store_completed}개
             </div>
         </div>'''
         
@@ -516,9 +514,9 @@ def company_page(company_name: str):
     if not stores_html:
         stores_html = '<p style="color: #999; text-align: center; padding: 40px;">등록된 업체가 없습니다</p>'
     
-    # 완료된 리뷰 테이블
+    # 모든 리뷰 테이블 (등록 즉시 표시)
     reviews_table = ''
-    if completed_reviews:
+    if all_reviews:
         reviews_table = '''
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
             <thead style="background: #f8f9fa;">
@@ -527,22 +525,27 @@ def company_page(company_name: str):
                     <th style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">리뷰URL</th>
                     <th style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">리뷰내용</th>
                     <th style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">영수증날짜</th>
+                    <th style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">상태</th>
                 </tr>
             </thead>
             <tbody id="reviewsTable">'''
         
-        for r in completed_reviews:
+        for r in all_reviews:
+            status_color = '#28a745' if r[5] == 'completed' else '#ffc107' if r[5] == 'pending' else '#dc3545'
+            status_text = '완료' if r[5] == 'completed' else '대기중' if r[5] == 'pending' else '실패'
+            
             reviews_table += f'''
                 <tr class="review-row" data-store="{r[1]}">
                     <td style="padding: 10px; border: 1px solid #ddd; font-weight: 600;">{r[1]}</td>
                     <td style="padding: 10px; border: 1px solid #ddd; font-size: 11px;"><a href="{r[2]}" target="_blank" style="color: #007bff;">{r[2][:35]}...</a></td>
-                    <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px; line-height: 1.4;">{r[3] or '-'}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px; line-height: 1.4;">{r[3] or (r[5] == 'pending' and '추출 대기중' or '-')}</td>
                     <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: 600; color: #dc3545;">{r[4] or '-'}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; text-align: center;"><span style="padding: 4px 8px; background: {status_color}; color: white; border-radius: 12px; font-size: 10px; font-weight: 600;">{status_text}</span></td>
                 </tr>'''
         
         reviews_table += '</tbody></table>'
     else:
-        reviews_table = '<p style="text-align: center; padding: 40px; color: #999;">완료된 리뷰가 없습니다</p>'
+        reviews_table = '<p style="text-align: center; padding: 40px; color: #999;">등록된 리뷰가 없습니다</p>'
     
     return HTMLResponse(f"""
 <!DOCTYPE html>
@@ -730,9 +733,13 @@ def company_page(company_name: str):
                 }}
             </script>
             
-            <!-- 완료된 리뷰 목록 -->
+            <!-- 전체 리뷰 목록 -->
             <div>
-                <h4 style="margin-bottom: 15px; color: #495057;">✅ 완료된 리뷰 목록 (업체용 리포트)</h4>
+                <h4 style="margin-bottom: 15px; color: #495057;">📝 전체 리뷰 목록 (등록 즉시 표시)</h4>
+                <div style="background: #e8f5e8; padding: 12px; border-radius: 6px; margin-bottom: 15px; text-align: center;">
+                    <p style="margin: 0; color: #155724; font-weight: 600;">✨ 리뷰어가 URL을 등록하면 즉시 여기에 표시됩니다</p>
+                    <p style="margin: 5px 0 0 0; color: #155724; font-size: 12px;">관리자가 추출을 완료하면 리뷰 내용이 채워집니다</p>
+                </div>
                 {reviews_table}
             </div>
         </div>
@@ -828,24 +835,28 @@ async def download_store_csv(company_name: str, store_name: str):
     conn = sqlite3.connect('clean.db')
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT r.store_name, r.review_url, r.extracted_text, r.extracted_date
+        SELECT r.store_name, r.review_url, r.extracted_text, r.extracted_date, r.status
         FROM reviews r
-        WHERE r.store_name = ? AND r.status = "completed"
+        WHERE r.store_name = ?
         ORDER BY r.created_at
     ''', (store_name,))
     
     reviews = cursor.fetchall()
     conn.close()
     
+    completed_count = len([r for r in reviews if r[4] == 'completed'])
+    
     csv_content = f"{store_name} 리뷰 현황 보고서\n"
     csv_content += f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-    csv_content += f"완료된 리뷰: {len(reviews)}개\n"
+    csv_content += f"총 등록: {len(reviews)}개\n"
+    csv_content += f"추출완료: {completed_count}개\n"
     csv_content += "\n"
     csv_content += "업체명,리뷰URL,리뷰내용,영수증날짜\n"
     
     for r in reviews:
-        content = (r[2] or "").replace('"', '""')
-        csv_content += f'"{r[0]}","{r[1]}","{content}","{r[3] or ""}"\n'
+        content = (r[2] or "추출대기중").replace('"', '""')
+        date_info = r[3] or (r[4] == 'pending' and '추출대기중' or '-')
+        csv_content += f'"{r[0]}","{r[1]}","{content}","{date_info}"\n'
     
     # 안전한 파일명 생성 (영문+숫자만)
     safe_filename = re.sub(r'[^a-zA-Z0-9]', '_', store_name)
@@ -1012,6 +1023,33 @@ def add_review_form(reviewer_name: str, store_name: str):
 async def submit_review(store_name: str = Form(), review_url: str = Form(), registered_by: str = Form()):
     conn = sqlite3.connect('clean.db')
     cursor = conn.cursor()
+    
+    # 중복 URL 체크
+    cursor.execute('SELECT * FROM reviews WHERE review_url = ?', (review_url,))
+    existing_url = cursor.fetchone()
+    
+    if existing_url:
+        conn.close()
+        return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>중복 URL 감지</title></head>
+<body style="font-family: Arial; background: #f5f7fa; text-align: center; padding: 50px;">
+    <div style="background: white; padding: 40px; border-radius: 15px; max-width: 500px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+        <h2 style="color: #dc3545; margin-bottom: 20px;">⚠️ 중복 URL 감지</h2>
+        <p style="margin-bottom: 15px; font-size: 16px;">이미 등록된 리뷰 URL입니다!</p>
+        <div style="background: #f8d7da; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <p style="margin: 5px 0; color: #721c24;"><strong>기존 등록:</strong> {existing_url[1]} ({existing_url[6]})</p>
+            <p style="margin: 5px 0; color: #721c24;"><strong>상태:</strong> {existing_url[5]}</p>
+        </div>
+        <div style="display: flex; gap: 15px; justify-content: center;">
+            <a href="/reviewer/{registered_by}" style="padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 6px;">돌아가기</a>
+            <a href="/add-review-form/{registered_by}/{store_name}" style="padding: 12px 24px; background: #6c757d; color: white; text-decoration: none; border-radius: 6px;">다른 URL 입력</a>
+        </div>
+    </div>
+</body>
+</html>""")
+    
     cursor.execute('INSERT INTO reviews (store_name, review_url, registered_by, status) VALUES (?, ?, ?, "pending")',
                   (store_name, review_url, registered_by))
     conn.commit()
@@ -1070,6 +1108,30 @@ async def process_review(review_id: int, background_tasks: BackgroundTasks):
 async def add_review(store_id: int = Form(), review_url: str = Form()):
     conn = sqlite3.connect('clean.db')
     cursor = conn.cursor()
+    
+    # 중복 URL 체크
+    cursor.execute('SELECT * FROM reviews WHERE review_url = ?', (review_url,))
+    existing_url = cursor.fetchone()
+    
+    if existing_url:
+        conn.close()
+        return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>중복 URL 감지 (관리자)</title></head>
+<body style="font-family: Arial; background: #f5f7fa; text-align: center; padding: 50px;">
+    <div style="background: white; padding: 40px; border-radius: 15px; max-width: 500px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+        <h2 style="color: #dc3545; margin-bottom: 20px;">⚠️ 중복 URL 감지</h2>
+        <p style="margin-bottom: 15px; font-size: 16px;">이미 등록된 리뷰 URL입니다!</p>
+        <div style="background: #f8d7da; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <p style="margin: 5px 0; color: #721c24;"><strong>기존 등록 업체:</strong> {existing_url[1]}</p>
+            <p style="margin: 5px 0; color: #721c24;"><strong>등록자:</strong> {existing_url[6]}</p>
+            <p style="margin: 5px 0; color: #721c24;"><strong>상태:</strong> {existing_url[5]}</p>
+        </div>
+        <a href="/admin" style="padding: 15px 30px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600;">관리자 페이지로 돌아가기</a>
+    </div>
+</body>
+</html>""")
     
     # store_id로 업체명 찾기
     cursor.execute('SELECT name FROM stores WHERE id = ?', (store_id,))
@@ -1204,12 +1266,28 @@ def extract_review(review_id: int):
             
             driver.quit()
             
-            # 결과 저장
-            status = 'completed' if "찾을 수 없습니다" not in text and len(text) > 10 else 'failed'
-            cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ? WHERE id = ?',
-                          (status, text, date, review_id))
-            
-            print(f"추출 완료: {store_name} - {status}")
+            # 리뷰 내용 중복 체크 (추출 성공시)
+            if "찾을 수 없습니다" not in text and len(text) > 10:
+                # 비슷한 내용의 리뷰가 있는지 체크
+                cursor.execute('SELECT id, store_name, registered_by FROM reviews WHERE extracted_text = ? AND id != ?', (text, review_id))
+                duplicate_content = cursor.fetchone()
+                
+                if duplicate_content:
+                    status = 'failed'
+                    error_msg = f"중복 내용 감지: {duplicate_content[1]} 업체의 {duplicate_content[2]} 등록 리뷰와 동일"
+                    cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ?, error_message = ? WHERE id = ?',
+                                  (status, text, date, error_msg, review_id))
+                    print(f"중복 내용 감지: {store_name} - {duplicate_content[1]} 업체와 동일")
+                else:
+                    status = 'completed'
+                    cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ? WHERE id = ?',
+                                  (status, text, date, review_id))
+                    print(f"추출 완료: {store_name} - {status}")
+            else:
+                status = 'failed'
+                cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ? WHERE id = ?',
+                              (status, text, date, review_id))
+                print(f"추출 실패: {store_name} - {status}")
             
         except Exception as e:
             print(f"추출 실패: {e}")
@@ -1438,4 +1516,4 @@ if __name__ == "__main__":
     print("깔끔한 네이버 리뷰 관리 시스템")
     print("접속: http://localhost:8000")
     print("단일 로그인: 사용자명만 입력하면 자동 등급 인식")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8003)
