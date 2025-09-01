@@ -9,11 +9,19 @@ from datetime import datetime, timedelta
 
 app = FastAPI()
 
+def get_db_path():
+    """데이터베이스 절대 경로 반환"""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clean.db')
+
 def init_db():
-    if os.path.exists('clean.db'):
-        os.remove('clean.db')
+    # 절대 경로로 데이터베이스 파일 생성
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clean.db')
     
-    conn = sqlite3.connect('clean.db')
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    
+    conn = sqlite3.connect(get_db_path())
+    print(f"데이터베이스 생성: {db_path}")
     cursor = conn.cursor()
     
     # 사용자 테이블 (모든 사용자를 하나의 테이블에)
@@ -99,7 +107,7 @@ def home():
 
 @app.post("/login")
 async def login(username: str = Form(), password: str = Form()):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     password_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -133,7 +141,7 @@ async def login(username: str = Form(), password: str = Form()):
 
 @app.get("/admin")
 def admin_page():
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     # 고객사 목록
@@ -439,7 +447,7 @@ def admin_page():
 
 @app.get("/company/{company_name}")
 def company_page(company_name: str):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     # 해당 고객사의 업체들
@@ -765,7 +773,7 @@ def company_page(company_name: str):
 # API들
 @app.post("/create-company")
 async def create_company(name: str = Form(), password: str = Form()):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     cursor.execute('INSERT INTO users (username, password_hash, user_type, company_name) VALUES (?, ?, ?, ?)', 
@@ -776,7 +784,7 @@ async def create_company(name: str = Form(), password: str = Form()):
 
 @app.post("/create-store")
 async def create_store(company_name: str = Form(), name: str = Form(), start_date: str = Form(""), daily_count: int = Form(1), duration_days: int = Form(30)):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('INSERT INTO stores (company_name, name, start_date, daily_count, duration_days) VALUES (?, ?, ?, ?, ?)',
                   (company_name, name, start_date, daily_count, duration_days))
@@ -786,7 +794,7 @@ async def create_store(company_name: str = Form(), name: str = Form(), start_dat
 
 @app.post("/create-reviewer")
 async def create_reviewer(name: str = Form(), password: str = Form()):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     
@@ -811,7 +819,7 @@ async def create_reviewer(name: str = Form(), password: str = Form()):
 
 @app.post("/create-assignment")
 async def create_assignment(reviewer_username: str = Form(), store_id: int = Form()):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('INSERT INTO assignments (reviewer_username, store_id) VALUES (?, ?)', 
                   (reviewer_username, store_id))
@@ -821,7 +829,7 @@ async def create_assignment(reviewer_username: str = Form(), store_id: int = For
 
 @app.get("/download-csv/{company_name}")
 async def download_csv(company_name: str):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('''
         SELECT r.store_name, r.review_url, r.extracted_text, r.extracted_date
@@ -847,7 +855,7 @@ async def download_csv(company_name: str):
 
 @app.get("/download-store-csv/{company_name}/{store_name}")
 async def download_store_csv(company_name: str, store_name: str):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('''
         SELECT r.store_name, r.review_url, r.extracted_text, r.extracted_date, r.status
@@ -884,7 +892,7 @@ async def download_store_csv(company_name: str, store_name: str):
 
 @app.get("/reviewer/{reviewer_name}")
 def reviewer_page(reviewer_name: str):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     # 배정된 업체들
@@ -1036,7 +1044,7 @@ def add_review_form(reviewer_name: str, store_name: str):
 
 @app.post("/submit-review")
 async def submit_review(store_name: str = Form(), review_url: str = Form(), registered_by: str = Form()):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     # 중복 URL 체크
@@ -1073,7 +1081,7 @@ async def submit_review(store_name: str = Form(), review_url: str = Form(), regi
 
 @app.get("/process-all")
 async def process_all(background_tasks: BackgroundTasks):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM reviews WHERE status = "pending"')
     pending_reviews = cursor.fetchall()
@@ -1121,7 +1129,7 @@ async def process_review(review_id: int, background_tasks: BackgroundTasks):
 
 @app.post("/add-review")
 async def add_review(store_id: int = Form(), review_url: str = Form()):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     # 중복 URL 체크
@@ -1161,7 +1169,7 @@ async def add_review(store_id: int = Form(), review_url: str = Form()):
 
 def extract_review(review_id: int):
     """실제 네이버 리뷰 추출 함수"""
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     try:
@@ -1317,7 +1325,7 @@ def extract_review(review_id: int):
 
 @app.get("/delete-review/{review_id}")
 async def delete_review(review_id: int):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('DELETE FROM reviews WHERE id = ?', (review_id,))
     conn.commit()
@@ -1326,7 +1334,7 @@ async def delete_review(review_id: int):
 
 @app.get("/delete-store/{store_id}")
 async def delete_store(store_id: int):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     # 관련 배정과 리뷰도 함께 삭제
     cursor.execute('DELETE FROM assignments WHERE store_id = ?', (store_id,))
@@ -1338,7 +1346,7 @@ async def delete_store(store_id: int):
 
 @app.get("/delete-user/{username}")
 async def delete_user(username: str):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     # 관련 배정도 함께 삭제
     cursor.execute('DELETE FROM assignments WHERE reviewer_username = ?', (username,))
@@ -1349,7 +1357,7 @@ async def delete_user(username: str):
 
 @app.get("/extend-store/{company_name}/{store_name}")
 def extend_store_form(company_name: str, store_name: str):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM stores WHERE company_name = ? AND name = ?', (company_name, store_name))
     store = cursor.fetchone()
@@ -1405,7 +1413,7 @@ def extend_store_form(company_name: str, store_name: str):
 
 @app.post("/submit-extend")
 async def submit_extend(store_name: str = Form(), company_name: str = Form(), additional_count: int = Form(), extend_reason: str = Form("")):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     # 현재 목표에서 추가
@@ -1428,7 +1436,7 @@ async def submit_extend(store_name: str = Form(), company_name: str = Form(), ad
 
 @app.get("/extend-store-admin/{company_name}/{store_name}")
 def extend_store_admin_form(company_name: str, store_name: str):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM stores WHERE company_name = ? AND name = ?', (company_name, store_name))
     store = cursor.fetchone()
@@ -1505,7 +1513,7 @@ def extend_store_admin_form(company_name: str, store_name: str):
 
 @app.post("/submit-extend-admin")
 async def submit_extend_admin(store_name: str = Form(), company_name: str = Form(), additional_count: int = Form(), extend_reason: str = Form()):
-    conn = sqlite3.connect('clean.db')
+    conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
     
     # 현재 설정 가져오기
