@@ -13,19 +13,61 @@ def get_db_path():
     """데이터베이스 절대 경로 반환"""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clean.db')
 
-def init_db():
-    # 절대 경로로 데이터베이스 파일 생성
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clean.db')
-    
+def backup_database():
+    """데이터베이스 백업 생성"""
+    db_path = get_db_path()
     if os.path.exists(db_path):
-        os.remove(db_path)
+        backup_path = os.path.join(os.path.dirname(db_path), f'backup_clean_{datetime.now().strftime("%Y%m%d_%H%M%S")}.db')
+        import shutil
+        shutil.copy2(db_path, backup_path)
+        print(f"데이터베이스 백업 생성: {backup_path}")
+        return backup_path
+    return None
+
+def check_data_integrity():
+    """데이터 무결성 체크"""
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cursor = conn.cursor()
+        
+        # 각 테이블 레코드 수 확인
+        cursor.execute('SELECT COUNT(*) FROM users')
+        users_count = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM stores')
+        stores_count = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM reviews')
+        reviews_count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        print(f"데이터 무결성 체크:")
+        print(f"  사용자: {users_count}개")
+        print(f"  업체: {stores_count}개") 
+        print(f"  리뷰: {reviews_count}개")
+        
+        return True
+    except Exception as e:
+        print(f"데이터 무결성 체크 실패: {e}")
+        return False
+
+def init_db():
+    """데이터베이스 초기화 (기존 데이터 완전 보존)"""
+    db_path = get_db_path()
     
-    conn = sqlite3.connect(get_db_path())
-    print(f"데이터베이스 생성: {db_path}")
+    # 기존 파일 존재 확인
+    if os.path.exists(db_path):
+        print(f"기존 데이터베이스 발견: {db_path} (크기: {os.path.getsize(db_path)} bytes)")
+        print("기존 데이터를 보존합니다.")
+    else:
+        print(f"새 데이터베이스 생성: {db_path}")
+    
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # 사용자 테이블 (모든 사용자를 하나의 테이블에)
-    cursor.execute('''CREATE TABLE users (
+    # 테이블이 없을 때만 생성 (IF NOT EXISTS 사용)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
         username TEXT UNIQUE,
         password_hash TEXT,
@@ -33,8 +75,7 @@ def init_db():
         company_name TEXT
     )''')
     
-    # 업체 테이블
-    cursor.execute('''CREATE TABLE stores (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS stores (
         id INTEGER PRIMARY KEY,
         company_name TEXT,
         name TEXT,
@@ -44,15 +85,13 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     
-    # 배정 테이블
-    cursor.execute('''CREATE TABLE assignments (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS assignments (
         id INTEGER PRIMARY KEY,
         reviewer_username TEXT,
         store_id INTEGER
     )''')
     
-    # 리뷰 테이블
-    cursor.execute('''CREATE TABLE reviews (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS reviews (
         id INTEGER PRIMARY KEY,
         store_name TEXT,
         review_url TEXT,
@@ -63,14 +102,25 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     
-    # 관리자 계정만 생성 (실제 서버용)
-    admin_hash = hashlib.sha256("doemtmzpcl1!".encode()).hexdigest()
-    cursor.execute('INSERT INTO users (username, password_hash, user_type) VALUES (?, ?, ?)', ('admin', admin_hash, 'admin'))
+    # 관리자 계정이 없을 때만 생성
+    cursor.execute('SELECT COUNT(*) FROM users WHERE username = "admin"')
+    admin_exists = cursor.fetchone()[0]
+    
+    if admin_exists == 0:
+        admin_hash = hashlib.sha256("doemtmzpcl1!".encode()).hexdigest()
+        cursor.execute('INSERT INTO users (username, password_hash, user_type) VALUES (?, ?, ?)', ('admin', admin_hash, 'admin'))
+        print("관리자 계정 생성됨")
+    else:
+        print("기존 관리자 계정 유지")
     
     conn.commit()
     conn.close()
+    print("데이터베이스 초기화 완료 (기존 데이터 보존)")
 
-init_db()
+# 시스템 시작시 안전 절차
+backup_database()  # 백업 생성
+init_db()         # 데이터베이스 초기화 (기존 데이터 보존)
+check_data_integrity()  # 데이터 무결성 체크
 
 @app.get("/")
 def home():
