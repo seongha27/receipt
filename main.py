@@ -247,12 +247,27 @@ def admin_page():
     <title>시스템 관리자</title>
     <script>
         function showTab(tab) {{
-            ['companies', 'stores', 'reviewers', 'assignments', 'reviews'].forEach(t => {{
-                document.getElementById(t + 'Tab').style.display = t === tab ? 'block' : 'none';
-                document.getElementById(t + 'Btn').style.background = t === tab ? '#4285f4' : '#f8f9fa';
-                document.getElementById(t + 'Btn').style.color = t === tab ? 'white' : '#333';
+            // 모든 탭 숨기기
+            const tabs = ['companies', 'stores', 'reviewers', 'assignments', 'reviews'];
+            tabs.forEach(t => {{
+                const tabElement = document.getElementById(t + 'Tab');
+                const btnElement = document.getElementById(t + 'Btn');
+                
+                if (tabElement) {{
+                    tabElement.style.display = t === tab ? 'block' : 'none';
+                }}
+                
+                if (btnElement) {{
+                    btnElement.style.background = t === tab ? '#4285f4' : '#f8f9fa';
+                    btnElement.style.color = t === tab ? 'white' : '#333';
+                }}
             }});
         }}
+        
+        // 페이지 로드시 기본 탭 표시
+        window.onload = function() {{
+            showTab('companies');
+        }};
     </script>
 </head>
 <body style="font-family: Arial; background: #f5f7fa; margin: 0; padding: 20px;">
@@ -1516,4 +1531,5 @@ if __name__ == "__main__":
     print("깔끔한 네이버 리뷰 관리 시스템")
     print("접속: http://localhost:8000")
     print("단일 로그인: 사용자명만 입력하면 자동 등급 인식")
-    uvicorn.run(app, host="0.0.0.0", port=8003)
+    port = int(os.getenv("PORT", 80))
+    uvicorn.run(app, host="0.0.0.0", port=port)
