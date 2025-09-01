@@ -1245,9 +1245,19 @@ def extract_review(review_id: int):
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
             options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--remote-debugging-port=9222')
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option('useAutomationExtension', False)
-            # headless 모드 제거하여 Chrome 창이 보이도록 함
+            
+            # 서버 환경 감지
+            if os.getenv('DISPLAY'):  # 서버 환경
+                options.add_argument('--headless')  # 서버에서는 headless 모드
+                options.add_argument('--disable-extensions')
+                options.add_argument('--disable-plugins')
+                print("서버 환경에서 headless 모드로 실행")
+            else:
+                print("로컬 환경에서 일반 모드로 실행")
             
             driver = webdriver.Chrome(options=options)
             driver.implicitly_wait(5)
