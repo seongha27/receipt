@@ -1345,17 +1345,23 @@ def extract_review(review_id: int):
             options = webdriver.ChromeOptions()
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-blink-features=AutomationControlled')
             options.add_argument('--disable-gpu')
-            options.add_argument('--remote-debugging-port=9222')
+            options.add_argument('--disable-web-security')
+            options.add_argument('--disable-features=VizDisplayCompositor')
+            options.add_argument('--disable-background-timer-throttling')
+            options.add_argument('--disable-renderer-backgrounding')
+            options.add_argument('--disable-backgrounding-occluded-windows')
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option('useAutomationExtension', False)
             
+            # User-Agent 변경 (봇 감지 방지)
+            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
             # 서버 환경 감지
-            if os.getenv('DISPLAY'):  # 서버 환경
-                options.add_argument('--headless')  # 서버에서는 headless 모드
+            if os.getenv('DISPLAY') or os.path.exists('/usr/bin/google-chrome'):  # 서버 환경
+                options.add_argument('--headless')
+                options.add_argument('--window-size=1920,1080')
                 options.add_argument('--disable-extensions')
-                options.add_argument('--disable-plugins')
                 print("서버 환경에서 headless 모드로 실행")
             else:
                 print("로컬 환경에서 일반 모드로 실행")
