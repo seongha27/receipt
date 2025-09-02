@@ -234,7 +234,7 @@ def admin_page():
         if s[3]:  # start_date
             try:
                 start = datetime.strptime(s[3], '%Y-%m-%d')
-                end = start + timedelta(days=(s[5] or 30) - 1)
+                end = start + timedelta(days=(s[5] or 30))
                 end_date = end.strftime('%Y-%m-%d')
             except:
                 end_date = ''
@@ -287,6 +287,9 @@ def admin_page():
         elif r[5] == "failed":
             action_buttons = f'<a href="/retry-review/{r[0]}" style="padding: 4px 8px; background: #ffc107; color: #333; text-decoration: none; border-radius: 3px; font-size: 11px;">🔄 재시도</a>'
         
+        # 리뷰 URL 표시
+        url_info = f'<div style="margin-top: 5px; color: #666; font-size: 11px;"><strong>URL:</strong> <a href="{r[2]}" target="_blank" style="color: #007bff;">{r[2][:60]}...</a></div>' if r[2] else ""
+        
         reviews_html += f'''<div style="padding: 12px; border-bottom: 1px solid #eee;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <div>
@@ -300,6 +303,7 @@ def admin_page():
                     <a href="/delete-review/{r[0]}" onclick="return confirm('이 리뷰를 삭제하시겠습니까?')" style="padding: 4px 8px; background: #dc3545; color: white; text-decoration: none; border-radius: 3px; font-size: 11px;">🗑️</a>
                 </div>
             </div>
+            {url_info}
             {extracted_preview}
         </div>'''
     
@@ -596,7 +600,7 @@ def company_page(company_name: str):
         if s[3]:  # start_date
             try:
                 start = datetime.strptime(s[3], '%Y-%m-%d')
-                end = start + timedelta(days=(s[5] or 30) - 1)
+                end = start + timedelta(days=(s[5] or 30))
                 end_date = end.strftime('%Y-%m-%d')
             except:
                 end_date = ''
@@ -628,6 +632,7 @@ def company_page(company_name: str):
                     <span style="padding: 3px 10px; background: {status_color}; color: white; border-radius: 12px; font-size: 11px; font-weight: 600;">{status}</span>
                 </div>
                 <div>
+                    <button onclick="toggleStoreReviews('{s[2]}')" style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px; cursor: pointer;">👁️ 리뷰보기</button>
                     <a href="/download-store-csv/{company_name}/{s[2]}" style="padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: 600;">📊 업체별 리포트</a>
                 </div>
             </div>
@@ -642,6 +647,12 @@ def company_page(company_name: str):
             </div>
             <div style="font-size: 14px; color: #666;">
                 ✅ 추출완료: {store_completed}개
+            </div>
+            
+            <!-- 업체별 리뷰 목록 (숨김 상태) -->
+            <div id="reviews_{s[2].replace(' ', '_')}" style="display: none; margin-top: 15px; background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                <h5 style="margin-bottom: 10px; color: #333;">{s[2]} 리뷰 목록</h5>
+                <div class="store-reviews-container" data-store="{s[2]}">로딩중...</div>
             </div>
         </div>'''
         
@@ -867,6 +878,43 @@ def company_page(company_name: str):
                         }}
                     }}
                 }}
+            
+            // 업체별 리뷰 펼쳐보기/접기
+            function toggleStoreReviews(storeName) {{
+                const reviewsDiv = document.getElementById('reviews_' + storeName.replace(/\s+/g, '_'));
+                const container = document.querySelector(`[data-store="${{storeName}}"]`);
+                
+                if (reviewsDiv.style.display === 'none') {{
+                    // 펼치기 - 리뷰 데이터 로드
+                    reviewsDiv.style.display = 'block';
+                    
+                    // 해당 업체의 리뷰만 필터링해서 표시
+                    const allReviews = document.querySelectorAll('.review-row');
+                    let storeReviewsHtml = '<div style="max-height: 300px; overflow-y: auto;">';
+                    
+                    let hasReviews = false;
+                    allReviews.forEach(row => {{
+                        if (row.dataset.store === storeName) {{
+                            storeReviewsHtml += row.outerHTML;
+                            hasReviews = true;
+                        }}
+                    }});
+                    
+                    if (!hasReviews) {{
+                        storeReviewsHtml += '<p style="text-align: center; color: #999; padding: 20px;">등록된 리뷰가 없습니다</p>';
+                    }}
+                    
+                    storeReviewsHtml += '</div>';
+                    container.innerHTML = storeReviewsHtml;
+                    
+                    // 버튼 텍스트 변경
+                    event.target.innerText = '🔼 접기';
+                }} else {{
+                    // 접기
+                    reviewsDiv.style.display = 'none';
+                    event.target.innerText = '👁️ 리뷰보기';
+                }}
+            }}
             </script>
             
             <!-- 전체 리뷰 목록 -->
@@ -1456,23 +1504,12 @@ def extract_review(review_id: int):
             
             driver.quit()
             
-            # 리뷰 내용 중복 체크 (추출 성공시)
+            # 추출 성공 여부만 판정 (내용 중복 체크 제거)
             if "찾을 수 없습니다" not in text and len(text) > 10:
-                # 비슷한 내용의 리뷰가 있는지 체크
-                cursor.execute('SELECT id, store_name, registered_by FROM reviews WHERE extracted_text = ? AND id != ?', (text, review_id))
-                duplicate_content = cursor.fetchone()
-                
-                if duplicate_content:
-                    status = 'failed'
-                    error_msg = f"중복 내용 감지: {duplicate_content[1]} 업체의 {duplicate_content[2]} 등록 리뷰와 동일"
-                    cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ?, error_message = ? WHERE id = ?',
-                                  (status, text, date, error_msg, review_id))
-                    print(f"중복 내용 감지: {store_name} - {duplicate_content[1]} 업체와 동일")
-                else:
-                    status = 'completed'
-                    cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ? WHERE id = ?',
-                                  (status, text, date, review_id))
-                    print(f"추출 완료: {store_name} - {status}")
+                status = 'completed'
+                cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ? WHERE id = ?',
+                              (status, text, date, review_id))
+                print(f"추출 완료: {store_name} - {status}")
             else:
                 status = 'failed'
                 cursor.execute('UPDATE reviews SET status = ?, extracted_text = ?, extracted_date = ? WHERE id = ?',
