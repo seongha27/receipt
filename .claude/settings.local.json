@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(C:\\Users\\wlstn\\Desktop/**)",
+      "Read(C:\\Users\\wlstn\\Desktop/**)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:adksetch.info)",
+      "Bash(dir \"C:\\Users\\wlstn\\Desktop\\naver-review-webapp\")",
+      "Bash(del:*)",
+      "Bash(rm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

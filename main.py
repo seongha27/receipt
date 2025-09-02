@@ -1471,8 +1471,36 @@ def extract_review(review_id: int):
                 review_elem = soup.find('a', {'data-pui-click-code': 'reviewend.text'})
                 text = review_elem.get_text(strip=True) if review_elem else "리뷰 본문을 찾을 수 없습니다"
                 
+                # 영수증 날짜 추출 (여러 방법 시도)
+                date = "영수증 날짜를 찾을 수 없습니다"
+                
+                # 방법 1: aria-hidden='true' time 태그
                 time_elem = soup.find('time', {'aria-hidden': 'true'})
-                date = time_elem.get_text(strip=True) if time_elem else "영수증 날짜를 찾을 수 없습니다"
+                if time_elem:
+                    date = time_elem.get_text(strip=True)
+                    print(f"방법1 - aria-hidden time: {date}")
+                
+                # 방법 2: 모든 time 태그 확인
+                if date == "영수증 날짜를 찾을 수 없습니다":
+                    all_time_elems = soup.find_all('time')
+                    for time_tag in all_time_elems:
+                        time_text = time_tag.get_text(strip=True)
+                        if '.' in time_text and any(day in time_text for day in ['월', '화', '수', '목', '금', '토', '일']):
+                            date = time_text
+                            print(f"방법2 - 모든 time 태그: {date}")
+                            break
+                
+                # 방법 3: 날짜 패턴 텍스트 검색
+                if date == "영수증 날짜를 찾을 수 없습니다":
+                    import re
+                    page_text = soup.get_text()
+                    date_pattern = r'\d{1,2}\.\d{1,2}\.[월화수목금토일]'
+                    matches = re.findall(date_pattern, page_text)
+                    if matches:
+                        date = matches[0]  # 첫 번째 매칭 사용
+                        print(f"방법3 - 텍스트 패턴: {date}")
+                
+                print(f"최종 추출된 날짜: {date}")
                 
                 print(f"직접 링크 추출: {text[:30]}... / {date}")
             else:
@@ -1531,8 +1559,36 @@ def extract_review(review_id: int):
                     review_div = target_review.find('div', class_='pui__vn15t2')
                     text = review_div.text.strip() if review_div else "리뷰 본문을 찾을 수 없습니다"
                     
+                    # 영수증 날짜 추출 (단축 URL - 여러 방법 시도)
+                    date = "영수증 날짜를 찾을 수 없습니다"
+                    
+                    # 방법 1: 해당 리뷰 블록에서 time 태그
                     time_elem = target_review.find('time', {'aria-hidden': 'true'})
-                    date = time_elem.text.strip() if time_elem else "영수증 날짜를 찾을 수 없습니다"
+                    if time_elem:
+                        date = time_elem.text.strip()
+                        print(f"단축URL 방법1: {date}")
+                    
+                    # 방법 2: 모든 time 태그에서 날짜 형식 찾기
+                    if date == "영수증 날짜를 찾을 수 없습니다":
+                        all_times = target_review.find_all('time')
+                        for time_tag in all_times:
+                            time_text = time_tag.get_text(strip=True)
+                            if '.' in time_text and any(day in time_text for day in ['월', '화', '수', '목', '금', '토', '일']):
+                                date = time_text
+                                print(f"단축URL 방법2: {date}")
+                                break
+                    
+                    # 방법 3: 리뷰 블록 전체 텍스트에서 패턴 검색
+                    if date == "영수증 날짜를 찾을 수 없습니다":
+                        import re
+                        block_text = target_review.get_text()
+                        date_pattern = r'\d{1,2}\.\d{1,2}\.[월화수목금토일]'
+                        matches = re.findall(date_pattern, block_text)
+                        if matches:
+                            date = matches[-1]  # 마지막 매칭 (보통 영수증 날짜가 뒤에)
+                            print(f"단축URL 방법3: {date}")
+                    
+                    print(f"단축URL 최종 날짜: {date}")
                     
                     print(f"단축 URL 추출: {text[:30]}... / {date}")
                 else:
@@ -2046,5 +2102,5 @@ if __name__ == "__main__":
     print("리뷰 관리 시스템")
     print("접속: http://localhost:8000")
     print("단일 로그인: 사용자명만 입력하면 자동 등급 인식")
-    port = int(os.getenv("PORT", 80))
+    port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
