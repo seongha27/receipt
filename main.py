@@ -1708,7 +1708,14 @@ async def upload_stores(excel_file: UploadFile = File(...)):
         contents = await excel_file.read()
         
         if excel_file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents))
+            # CSV 인코딩 문제 해결
+            try:
+                df = pd.read_csv(io.BytesIO(contents), encoding='utf-8')
+            except UnicodeDecodeError:
+                try:
+                    df = pd.read_csv(io.BytesIO(contents), encoding='cp949')
+                except UnicodeDecodeError:
+                    df = pd.read_csv(io.BytesIO(contents), encoding='latin-1')
         else:
             df = pd.read_excel(io.BytesIO(contents))
         
@@ -1761,7 +1768,14 @@ async def upload_reviews(excel_file: UploadFile = File(...)):
         contents = await excel_file.read()
         
         if excel_file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents))
+            # CSV 인코딩 문제 해결
+            try:
+                df = pd.read_csv(io.BytesIO(contents), encoding='utf-8')
+            except UnicodeDecodeError:
+                try:
+                    df = pd.read_csv(io.BytesIO(contents), encoding='cp949')
+                except UnicodeDecodeError:
+                    df = pd.read_csv(io.BytesIO(contents), encoding='latin-1')
         else:
             df = pd.read_excel(io.BytesIO(contents))
         
