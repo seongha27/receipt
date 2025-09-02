@@ -1,227 +1,331 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+수정된 full_review_extractor.py
+- 정확한 영수증 날짜 추출 (8.28.목 vs 8.27.수 구분)
+- 접기 버튼 기능 추가
+"""
+
+import time
+import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-import requests
 import logging
-import time
-import os
-from typing import Tuple, Optional
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
-class FullNaverReviewExtractor:
-    def __init__(self):
-        self.driver = None
-        self.chrome_available = False
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
+def extract_naver_review_full(review_url, expected_shop_name):
+    """
+    개선된 네이버 리뷰 추출 함수
+    - 정확한 영수증 날짜 추출
+    - 접기 버튼 기능
+    """
+    driver = None
+    try:
+        # 셀레니움 드라이버 설정
+        options = webdriver.ChromeOptions()
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--headless')  # 서버 환경에서는 headless 모드
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
         
-    def setup_selenium(self):
-        """셀레니움 크롬 드라이버 설정"""
-        try:
-            options = webdriver.ChromeOptions()
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-gpu')
-            options.add_argument('--headless')
-            options.add_argument('--disable-blink-features=AutomationControlled')
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option('useAutomationExtension', False)
-            
-            # 서버 환경에서 Chrome 바이너리 경로
-            chrome_binary = os.getenv('GOOGLE_CHROME_BIN')
-            if chrome_binary:
-                options.binary_location = chrome_binary
-            
-            self.driver = webdriver.Chrome(options=options)
-            self.driver.implicitly_wait(5)
-            self.chrome_available = True
-            
-            logger.info("셀레니움 드라이버 설정 완료")
-            return True
-        except Exception as e:
-            logger.warning(f"셀레니움 드라이버 설정 실패: {str(e)}")
-            logger.info("HTTP 요청 방식으로 대체 실행합니다")
-            self.chrome_available = False
-            return False
+        driver = webdriver.Chrome(options=options)
+        driver.implicitly_wait(5)
+        
+        logging.info(f"리뷰 추출 시작: {review_url}")
+        
+        # 페이지 로드
+        driver.get(review_url)
+        
+        # 리디렉션 대기 (naver.me 단축 URL인 경우)
+        if "naver.me" in review_url:
+            WebDriverWait(driver, 10).until(
+                lambda d: d.current_url != review_url
+            )
+            logging.info(f"리디렉션 완료: {driver.current_url}")
+        
+        time.sleep(3)  # 페이지 로딩 대기
+        
+        # 더보기 버튼 클릭 (있다면)
+        click_more_buttons(driver)
+        
+        # HTML 파싱
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        
+        # 리뷰 텍스트 추출
+        review_text = extract_review_text(soup, expected_shop_name)
+        
+        # 개선된 영수증 날짜 추출
+        receipt_date = extract_accurate_receipt_date(soup)
+        
+        # 접기 버튼 클릭 (페이지 상태 복구)
+        click_collapse_buttons(driver)
+        
+        logging.info(f"추출 완료 - 날짜: {receipt_date}, 텍스트 길이: {len(review_text)}")
+        
+        return review_text, receipt_date
+        
+    except Exception as e:
+        logging.error(f"리뷰 추출 중 오류: {str(e)}")
+        return "오류 발생", "날짜 추출 실패"
+        
+    finally:
+        if driver:
+            driver.quit()
 
-    def extract_direct_review(self, url: str) -> Tuple[str, str]:
-        """개별 리뷰 페이지에서 직접 추출 (새로운 링크 형식)"""
-        if not self.chrome_available:
-            return self.extract_with_requests(url)
-            
+def click_more_buttons(driver):
+    """더보기 버튼들 클릭"""
+    try:
+        clicked_count = 0
+        
+        # 1순위: "펼쳐서 더보기" span 요소
         try:
-            if not self.driver:
-                if not self.setup_selenium():
-                    return self.extract_with_requests(url)
-                    
-            self.driver.get(url)
-            time.sleep(3)
-            
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            
-            # 리뷰 본문 추출 - data-pui-click-code="reviewend.text" 속성 사용
-            review_text = ""
-            review_elem = soup.find('a', {'data-pui-click-code': 'reviewend.text'})
-            if review_elem:
-                review_text = review_elem.get_text(strip=True)
-                logger.info(f"리뷰 본문 찾음: {review_text[:50]}...")
-            
-            # 영수증 날짜 추출 - time 태그 사용
-            receipt_date = ""
-            time_elem = soup.find('time', {'aria-hidden': 'true'})
-            if time_elem:
-                receipt_date = time_elem.get_text(strip=True)
-                logger.info(f"영수증 날짜 찾음: {receipt_date}")
-            
-            return review_text or "리뷰 본문을 찾을 수 없습니다", receipt_date or "영수증 날짜를 찾을 수 없습니다"
-            
+            more_spans = driver.find_elements(By.CSS_SELECTOR, 'span.TeItc')
+            for span in more_spans:
+                if span.is_displayed() and '펼쳐서 더보기' in span.text:
+                    driver.execute_script("arguments[0].scrollIntoView(true);", span)
+                    time.sleep(0.3)
+                    # 부모 요소 클릭
+                    parent = span.find_element(By.XPATH, "./..")
+                    driver.execute_script("arguments[0].click();", parent)
+                    clicked_count += 1
+                    logging.info("펼쳐서 더보기 버튼 클릭 성공")
+                    time.sleep(1)
         except Exception as e:
-            logger.error(f"개별 리뷰 추출 중 오류: {str(e)}")
-            return "오류 발생", "오류 발생"
-
-    def extract_review_data_optimized(self, url: str, expected_shop_name: str) -> Tuple[str, str]:
-        """최적화된 리뷰 데이터 추출 (기존 방식)"""
-        if not self.chrome_available:
-            return self.extract_with_requests(url)
-            
+            logging.debug(f"TeItc 클래스 더보기 버튼 처리 중 오류: {str(e)}")
+        
+        # 2순위: data-pui-click-code 속성
         try:
-            if not self.driver:
-                if not self.setup_selenium():
-                    return self.extract_with_requests(url)
-                    
-            # 페이지 로드
-            self.driver.get(url)
-            
-            # 리디렉션 완료 대기 (단축 URL인 경우)
-            if "naver.me" in url:
-                WebDriverWait(self.driver, 10).until(
-                    lambda d: d.current_url != url
-                )
-                logger.info(f"리디렉션 완료: {self.driver.current_url}")
-            
-            time.sleep(3)
-            
-            # 업체명으로 리뷰 찾기
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            target_review = None
-            
-            # 모든 리뷰 블록 확인
-            review_blocks = soup.find_all('div', class_='hahVh2')
-            for block in review_blocks:
-                shop_elem = block.find('span', class_='pui__pv1E2a')
-                if shop_elem and shop_elem.text.strip() == expected_shop_name:
-                    target_review = block
-                    logger.info(f"업체명 '{expected_shop_name}' 찾음")
-                    break
-            
-            # 스크롤해서 찾기
-            if not target_review:
-                logger.info("스크롤하면서 업체명 검색")
-                for _ in range(5):
-                    self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                    time.sleep(2)
-                    
-                    soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-                    review_blocks = soup.find_all('div', class_='hahVh2')
-                    
-                    for block in review_blocks:
-                        shop_elem = block.find('span', class_='pui__pv1E2a')
-                        if shop_elem and shop_elem.text.strip() == expected_shop_name:
-                            target_review = block
-                            break
-                    
-                    if target_review:
+            pui_buttons = driver.find_elements(By.CSS_SELECTOR, 'a[data-pui-click-code*="showmore"]')
+            for button in pui_buttons:
+                if button.is_displayed() and button.is_enabled():
+                    driver.execute_script("arguments[0].scrollIntoView(true);", button)
+                    time.sleep(0.3)
+                    driver.execute_script("arguments[0].click();", button)
+                    clicked_count += 1
+                    logging.info("data-pui 더보기 버튼 클릭 성공")
+                    time.sleep(1)
+        except Exception as e:
+            logging.debug(f"data-pui 더보기 버튼 처리 중 오류: {str(e)}")
+        
+        # 3순위: 텍스트 기반 더보기 버튼
+        try:
+            all_elements = driver.find_elements(By.CSS_SELECTOR, "span, button, a")
+            for element in all_elements:
+                if (element.is_displayed() and element.text and 
+                    ('더보기' in element.text or '펼쳐' in element.text)):
+                    try:
+                        driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                        time.sleep(0.3)
+                        driver.execute_script("arguments[0].click();", element)
+                        clicked_count += 1
+                        logging.info(f"텍스트 기반 더보기 클릭: {element.text[:20]}...")
+                        time.sleep(1)
                         break
+                    except:
+                        continue
+        except Exception as e:
+            logging.debug(f"텍스트 기반 더보기 버튼 처리 중 오류: {str(e)}")
+        
+        if clicked_count > 0:
+            logging.info(f"총 {clicked_count}개 더보기 버튼 클릭 완료")
+        
+    except Exception as e:
+        logging.warning(f"더보기 버튼 클릭 중 오류: {str(e)}")
+
+def click_collapse_buttons(driver):
+    """접기 버튼들 클릭 (페이지 상태 복구)"""
+    try:
+        clicked_count = 0
+        
+        # 접기 관련 텍스트를 가진 요소들 찾기
+        all_elements = driver.find_elements(By.CSS_SELECTOR, "span, button, a, div")
+        
+        for element in all_elements:
+            try:
+                if (element.is_displayed() and element.text and 
+                    ('접어두기' in element.text or '간단히' in element.text or 
+                     '접기' in element.text or '줄이기' in element.text or 
+                     '닫기' in element.text or '접어서' in element.text or
+                     '접어 보기' in element.text)):
+                    
+                    if element.tag_name in ['button', 'a'] or element.get_attribute('onclick'):
+                        driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                        time.sleep(0.3)
+                        driver.execute_script("arguments[0].click();", element)
+                        clicked_count += 1
+                        logging.info(f"접기 버튼 클릭: {element.text[:20]}...")
+                        time.sleep(0.5)
+                    else:
+                        # span이면 부모 요소 클릭 시도
+                        if element.tag_name == 'span':
+                            try:
+                                parent = element.find_element(By.XPATH, "./..")
+                                if parent.is_displayed():
+                                    driver.execute_script("arguments[0].scrollIntoView(true);", parent)
+                                    time.sleep(0.3)
+                                    driver.execute_script("arguments[0].click();", parent)
+                                    clicked_count += 1
+                                    logging.info(f"접기 부모 버튼 클릭: {element.text[:20]}...")
+                                    time.sleep(0.5)
+                            except:
+                                pass
+                                
+            except Exception:
+                continue
+        
+        if clicked_count > 0:
+            logging.info(f"총 {clicked_count}개 접기 버튼 클릭 완료")
+        else:
+            logging.info("접기 버튼을 찾을 수 없습니다 (정상 - 이미 접힌 상태일 수 있음)")
             
-            # 데이터 추출
-            if target_review:
-                review_text = ""
-                receipt_date = ""
-                
-                # 리뷰 본문 추출
-                review_div = target_review.find('div', class_='pui__vn15t2')
+    except Exception as e:
+        logging.warning(f"접기 버튼 클릭 중 오류: {str(e)}")
+
+def extract_accurate_receipt_date(soup):
+    """
+    정확한 영수증 날짜 추출
+    여러 time 요소 중 영수증 날짜 형식을 우선 선택
+    """
+    receipt_date = ""
+    
+    # 1차: 모든 time 요소에서 영수증 날짜 형식 찾기
+    time_elements = soup.find_all('time')
+    logging.info(f"페이지에서 발견된 time 요소 개수: {len(time_elements)}")
+    
+    for i, time_elem in enumerate(time_elements):
+        date_text = time_elem.get_text(strip=True)
+        attrs = str(time_elem.attrs) if time_elem.attrs else "없음"
+        logging.info(f"Time 요소 {i+1}: '{date_text}' - 속성: {attrs}")
+        
+        # 영수증 날짜 형식 확인 (예: "8.28.목", "2024.8.28.목")
+        if is_receipt_date_format(date_text):
+            receipt_date = date_text
+            logging.info(f"✅ 영수증 날짜로 선택: {receipt_date}")
+            break
+    
+    # 2차: 못 찾았으면 기존 방식으로 재시도 (aria-hidden='true')
+    if not receipt_date:
+        time_elem = soup.find('time', {'aria-hidden': 'true'})
+        if time_elem:
+            receipt_date = time_elem.get_text(strip=True)
+            logging.info(f"기본 방식으로 찾은 날짜: {receipt_date}")
+    
+    # 3차: 페이지 전체에서 날짜 패턴 검색 (최후의 수단)
+    if not receipt_date:
+        receipt_date = extract_date_from_page_text(soup.get_text())
+        if receipt_date:
+            logging.info(f"페이지 텍스트에서 찾은 날짜: {receipt_date}")
+    
+    result = receipt_date or "영수증 날짜를 찾을 수 없습니다"
+    logging.info(f"최종 선택된 영수증 날짜: {result}")
+    
+    return result
+
+def is_receipt_date_format(date_text):
+    """영수증 날짜 형식인지 확인"""
+    if not date_text:
+        return False
+    
+    # 영수증 날짜 패턴들 (요일 포함)
+    receipt_patterns = [
+        r'\d{1,2}\.\d{1,2}\.[월화수목금토일]',  # 8.28.목
+        r'\d{4}\.\d{1,2}\.\d{1,2}\.[월화수목금토일]',  # 2024.8.28.목
+        r'\d{1,2}/\d{1,2}\([월화수목금토일]\)',  # 8/28(목)
+        r'\d{4}/\d{1,2}/\d{1,2}\([월화수목금토일]\)',  # 2024/8/28(목)
+    ]
+    
+    for pattern in receipt_patterns:
+        if re.search(pattern, date_text):
+            logging.debug(f"날짜 패턴 매치: '{date_text}' -> {pattern}")
+            return True
+    
+    return False
+
+def extract_date_from_page_text(text):
+    """페이지 전체 텍스트에서 날짜 패턴 추출"""
+    if not text:
+        return ""
+    
+    patterns = [
+        r'\d{1,2}\.\d{1,2}\.[월화수목금토일]',
+        r'\d{4}\.\d{1,2}\.\d{1,2}\.[월화수목금토일]',
+        r'\d{1,2}/\d{1,2}\([월화수목금토일]\)',
+        r'\d{4}/\d{1,2}/\d{1,2}\([월화수목금토일]\)',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            logging.debug(f"페이지 텍스트에서 날짜 발견: {match.group()}")
+            return match.group()
+    
+    return ""
+
+def extract_review_text(soup, expected_shop_name):
+    """리뷰 텍스트 추출"""
+    review_text = ""
+    
+    # 다양한 셀렉터로 리뷰 텍스트 시도
+    selectors = [
+        'a[data-pui-click-code="reviewend.text"]',
+        'div.pui__vn15t2',
+        'div[class*="review_text"]',
+        'div[class*="comment"]'
+    ]
+    
+    for selector in selectors:
+        review_elem = soup.select_one(selector)
+        if review_elem:
+            review_text = review_elem.get_text(strip=True)
+            logging.info(f"리뷰 본문 찾음 ({selector}): {review_text[:50]}...")
+            break
+    
+    # 업체명으로 특정 리뷰 블록 찾기 (기존 로직)
+    if not review_text and expected_shop_name:
+        review_blocks = soup.find_all('div', class_='hahVh2')
+        for block in review_blocks:
+            shop_elem = block.find('span', class_='pui__pv1E2a')
+            if shop_elem and shop_elem.text.strip() == expected_shop_name:
+                review_div = block.find('div', class_='pui__vn15t2')
                 if review_div:
                     review_text = review_div.text.strip()
-                
-                # 영수증 날짜 추출
-                time_elem = target_review.find('time', {'aria-hidden': 'true'})
-                if time_elem:
-                    receipt_date = time_elem.text.strip()
-                
-                return review_text or "리뷰 본문을 찾을 수 없습니다", receipt_date or "영수증 날짜를 찾을 수 없습니다"
-            else:
-                logger.warning(f"업체명 '{expected_shop_name}'과 일치하는 리뷰를 찾지 못했습니다")
-                return "일치하는 업체명의 리뷰를 찾을 수 없습니다", "영수증 날짜를 찾을 수 없습니다"
-                
-        except Exception as e:
-            logger.error(f"데이터 추출 중 오류: {str(e)}")
-            return "오류 발생", "오류 발생"
-
-    def extract_with_requests(self, url: str) -> Tuple[str, str]:
-        """HTTP 요청으로 기본 정보 추출 (Chrome 없을 때)"""
-        try:
-            logger.info(f"HTTP 요청으로 페이지 접근: {url}")
-            response = self.session.get(url, timeout=10)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # 기본 정보 추출
-            title = soup.find('title')
-            title_text = title.get_text() if title else "제목 없음"
-            
-            # 메타 태그에서 설명 추출
-            meta_desc = soup.find('meta', attrs={'name': 'description'})
-            description = meta_desc.get('content', '') if meta_desc else ""
-            
-            review_text = f"페이지 제목: {title_text}\n설명: {description[:100]}..."
-            receipt_date = "HTTP 추출 - 날짜 정보 제한됨"
-            
-            return review_text, receipt_date
-            
-        except Exception as e:
-            logger.error(f"HTTP 추출 오류: {str(e)}")
-            return f"HTTP 추출 실패: {str(e)}", "오류 발생"
-
-    def extract_review(self, url: str, expected_shop_name: Optional[str] = None) -> Tuple[str, str]:
-        """메인 추출 함수 - URL 타입에 따라 적절한 방법 선택"""
-        try:
-            if "/my/review/" in url:
-                # 개별 리뷰 페이지 형식
-                logger.info("개별 리뷰 페이지 형식으로 처리")
-                return self.extract_direct_review(url)
-            else:
-                # 기존 형식 (naver.me 단축 URL 등)
-                logger.info("기존 형식으로 처리")
-                if not expected_shop_name:
-                    # 업체명이 없으면 HTTP 방식으로
-                    return self.extract_with_requests(url)
-                return self.extract_review_data_optimized(url, expected_shop_name)
-        except Exception as e:
-            logger.error(f"리뷰 추출 중 오류: {str(e)}")
-            return "추출 중 오류 발생", "추출 중 오류 발생"
+                    logging.info(f"업체명 매칭으로 리뷰 찾음: {review_text[:50]}...")
+                    break
     
-    def close(self):
-        """드라이버 종료"""
-        if self.driver:
-            self.driver.quit()
-            self.driver = None
+    result = review_text or "리뷰 본문을 찾을 수 없습니다"
+    return result
 
-    def __enter__(self):
-        return self
+# 테스트 함수
+def test_extract_function():
+    """수정된 함수 테스트"""
+    # 테스트 URL (실제 사용시 변경)
+    test_url = "https://naver.me/sample"  # 실제 URL로 변경
+    test_shop_name = "테스트업체"  # 실제 업체명으로 변경
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+    print("=== 수정된 리뷰 추출 함수 테스트 ===")
+    review_text, receipt_date = extract_naver_review_full(test_url, test_shop_name)
+    
+    print(f"추출 결과:")
+    print(f"  영수증 날짜: {receipt_date}")
+    print(f"  리뷰 텍스트: {review_text[:100]}...")
+    
+    # 날짜 형식 검증
+    if is_receipt_date_format(receipt_date):
+        print("✅ 영수증 날짜 형식 검증 통과")
+    else:
+        print("❌ 영수증 날짜 형식 검증 실패")
 
-# 편의 함수
-def extract_naver_review_full(url: str, shop_name: Optional[str] = None) -> Tuple[str, str]:
-    """완전한 리뷰 추출 함수"""
-    with FullNaverReviewExtractor() as extractor:
-        return extractor.extract_review(url, shop_name)
+if __name__ == "__main__":
+    # 테스트 실행
+    test_extract_function()
