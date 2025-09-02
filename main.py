@@ -960,10 +960,17 @@ async def download_csv(company_name: str):
         content = (r[2] or "").replace('"', '""')
         csv_content += f'"{r[0]}","{r[1]}","{content}","{r[3] or ""}"\n'
     
+    # URL 인코딩으로 한글 파일명 지원
+    import urllib.parse
+    encoded_filename = urllib.parse.quote(f"{company_name}_전체리포트.csv".encode('utf-8'))
+    
     return Response(
         content=csv_content.encode('utf-8-sig'),
-        media_type='application/octet-stream',
-        headers={"Content-Disposition": f"attachment; filename={company_name}_report.csv"}
+        media_type='text/csv',
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Content-Type": "text/csv; charset=utf-8"
+        }
     )
 
 @app.get("/download-store-csv/{company_name}/{store_name}")
@@ -994,29 +1001,15 @@ async def download_store_csv(company_name: str, store_name: str):
         date_info = r[3] or (r[4] == 'pending' and '추출대기중' or '-')
         csv_content += f'"{r[0]}","{r[1]}","{content}","{date_info}"\n'
     
-    # 한글 업체명을 영문으로 변환하는 매핑
-    name_mapping = {
-        '쭈꾸미도사': 'Jjukkumi_Dosa',
-        '잘라주 클린뷰어': 'Jaraju_Cleanviewer', 
-        '스타벅스': 'Starbucks',
-        '맥도날드': 'McDonalds',
-        '버거킹': 'BurgerKing'
-    }
-    
-    # 파일명 생성 (한글 → 영문 변환)
-    safe_filename = store_name
-    for korean, english in name_mapping.items():
-        if korean in store_name:
-            safe_filename = safe_filename.replace(korean, english)
-    
-    # 나머지 특수문자 처리
-    safe_filename = re.sub(r'[^a-zA-Z0-9_]', '_', safe_filename)
+    # URL 인코딩으로 한글 파일명 지원
+    import urllib.parse
+    encoded_filename = urllib.parse.quote(f"{store_name}_리포트.csv".encode('utf-8'))
     
     return Response(
         content=csv_content.encode('utf-8-sig'),
-        media_type='text/csv; charset=utf-8',
+        media_type='text/csv',
         headers={
-            "Content-Disposition": f"attachment; filename={safe_filename}_report.csv",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
             "Content-Type": "text/csv; charset=utf-8"
         }
     )
@@ -1711,19 +1704,26 @@ from fastapi import UploadFile, File
 async def download_template(template_type: str):
     if template_type == "stores":
         csv_content = "고객사명,업체명,시작일,하루갯수,캠페인일수\n"
-        csv_content += "adsketch,스타벅스 강남점,2024-09-01,5,30\n"
-        csv_content += "studioview,맥도날드 서초점,2024-09-02,3,20\n"
-        filename = "stores_template.csv"
+        csv_content += "adsketch,황소양곱창 양재점,2024-09-01,5,30\n"
+        csv_content += "studioview,쭈꾸미도사 잠실점,2024-09-02,3,20\n"
+        filename = "업체등록_템플릿.csv"
     else:  # reviews
         csv_content = "업체명,리뷰URL\n"
-        csv_content += "스타벅스 강남점,https://naver.me/5jBm0HYx\n"
-        csv_content += "맥도날드 서초점,https://m.place.naver.com/my/review/test\n"
-        filename = "reviews_template.csv"
+        csv_content += "황소양곱창 양재점,https://naver.me/5jBm0HYx\n"
+        csv_content += "쭈꾸미도사 잠실점,https://m.place.naver.com/my/review/test\n"
+        filename = "리뷰등록_템플릿.csv"
+    
+    # 한글 파일명 URL 인코딩
+    import urllib.parse
+    encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
     
     return Response(
         content=csv_content.encode('utf-8-sig'),
-        media_type='application/octet-stream',
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        media_type='text/csv',
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Content-Type": "text/csv; charset=utf-8"
+        }
     )
 
 # 업체 대량 업로드
