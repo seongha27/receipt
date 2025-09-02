@@ -4,3 +4,5 @@ python-multipart
 selenium
 beautifulsoup4
 requests
+pandas
+openpyxl

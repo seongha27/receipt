@@ -5,6 +5,8 @@ import sqlite3
 import hashlib
 import os
 import re
+import pandas as pd
+import io
 from datetime import datetime, timedelta
 
 app = FastAPI()
@@ -134,7 +136,7 @@ def home():
 <body style="font-family: Arial; background: linear-gradient(135deg, #4285f4, #34a853); margin: 0; padding: 20px; min-height: 100vh;">
     <div style="max-width: 500px; margin: 100px auto;">
         <div style="background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center;">
-            <h1 style="margin-bottom: 30px; color: #333;">네이버 리뷰 관리 시스템</h1>
+            <h1 style="margin-bottom: 30px; color: #333;">리뷰 관리 시스템</h1>
             
             <form action="/login" method="post">
                 <div style="margin-bottom: 25px;">
@@ -306,7 +308,7 @@ def admin_page():
     <script>
         function showTab(tab) {{
             // 모든 탭 숨기기
-            const tabs = ['companies', 'stores', 'reviewers', 'assignments', 'reviews'];
+            const tabs = ['companies', 'stores', 'reviewers', 'assignments', 'reviews', 'upload'];
             tabs.forEach(t => {{
                 const tabElement = document.getElementById(t + 'Tab');
                 const btnElement = document.getElementById(t + 'Btn');
@@ -322,10 +324,20 @@ def admin_page():
             }});
         }}
         
-        // 페이지 로드시 기본 탭 표시
+        // 페이지 로드시 탭 복원
         window.onload = function() {{
-            showTab('companies');
+            const urlParams = new URLSearchParams(window.location.search);
+            const activeTab = urlParams.get('tab') || 'companies';
+            showTab(activeTab);
         }};
+        
+        // 탭 클릭시 URL 업데이트
+        function showTabWithUrl(tab) {{
+            showTab(tab);
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.set('tab', tab);
+            window.history.pushState({{}}, '', newUrl);
+        }}
     </script>
 </head>
 <body style="font-family: Arial; background: #f5f7fa; margin: 0; padding: 20px;">
@@ -339,11 +351,12 @@ def admin_page():
         <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 25px;">
             <!-- 탭 메뉴 -->
             <div style="margin-bottom: 25px; border-bottom: 2px solid #f0f0f0; padding-bottom: 15px;">
-                <button onclick="showTab('companies')" id="companiesBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #4285f4; color: white; cursor: pointer; font-weight: 600;">🏢 고객사</button>
-                <button onclick="showTab('stores')" id="storesBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🏪 업체</button>
-                <button onclick="showTab('reviewers')" id="reviewersBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">👤 리뷰어</button>
-                <button onclick="showTab('assignments')" id="assignmentsBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🔗 배정</button>
-                <button onclick="showTab('reviews')" id="reviewsBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📝 리뷰</button>
+                <button onclick="showTabWithUrl('companies')" id="companiesBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #4285f4; color: white; cursor: pointer; font-weight: 600;">🏢 고객사</button>
+                <button onclick="showTabWithUrl('stores')" id="storesBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🏪 업체</button>
+                <button onclick="showTabWithUrl('reviewers')" id="reviewersBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">👤 리뷰어</button>
+                <button onclick="showTabWithUrl('assignments')" id="assignmentsBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🔗 배정</button>
+                <button onclick="showTabWithUrl('reviews')" id="reviewsBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📝 리뷰</button>
+                <button onclick="showTabWithUrl('upload')" id="uploadBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📊 엑셀업로드</button>
             </div>
 
             <!-- 고객사 관리 -->
@@ -488,6 +501,49 @@ def admin_page():
                 <div style="background: #ffffff; border: 1px solid #e9ecef; border-radius: 10px; padding: 15px;">
                     <h4 style="margin-bottom: 15px; color: #495057;">전체 리뷰 목록</h4>
                     {reviews_html}
+                </div>
+            </div>
+
+            <!-- 엑셀 업로드 -->
+            <div id="uploadTab" style="display: none;">
+                <h3 style="margin-bottom: 20px; color: #333;">📊 엑셀 대량 업로드</h3>
+                
+                <!-- 업체 대량 등록 -->
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px;">
+                    <h4 style="margin-bottom: 15px; color: #495057;">🏪 업체 대량 등록</h4>
+                    <form action="/upload-stores" method="post" enctype="multipart/form-data">
+                        <div style="margin-bottom: 15px;">
+                            <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" style="margin-bottom: 10px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" required>
+                            <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">업체 일괄 등록</button>
+                        </div>
+                        <div style="background: #e8f5e8; padding: 15px; border-radius: 6px;">
+                            <p style="margin: 0 0 10px 0; font-weight: 600; color: #155724;">📋 엑셀 형식 (A, B, C, D, E 순서):</p>
+                            <p style="margin: 5px 0; color: #155724;">A열: 고객사명 | B열: 업체명 | C열: 시작일(YYYY-MM-DD) | D열: 하루갯수 | E열: 캠페인일수</p>
+                        </div>
+                    </form>
+                    
+                    <div style="margin-top: 15px; text-align: center;">
+                        <a href="/download-template/stores" style="padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; font-size: 12px;">📄 업체 템플릿 다운로드</a>
+                    </div>
+                </div>
+
+                <!-- 리뷰 대량 등록 -->
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px;">
+                    <h4 style="margin-bottom: 15px; color: #495057;">📝 리뷰 대량 등록</h4>
+                    <form action="/upload-reviews" method="post" enctype="multipart/form-data">
+                        <div style="margin-bottom: 15px;">
+                            <input type="file" name="excel_file" accept=".xlsx,.xls,.csv" style="margin-bottom: 10px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" required>
+                            <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">리뷰 일괄 등록</button>
+                        </div>
+                        <div style="background: #e3f2fd; padding: 15px; border-radius: 6px;">
+                            <p style="margin: 0 0 10px 0; font-weight: 600; color: #1565c0;">📋 엑셀 형식 (A, B 순서):</p>
+                            <p style="margin: 5px 0; color: #1565c0;">A열: 업체명 | B열: 리뷰URL</p>
+                        </div>
+                    </form>
+                    
+                    <div style="margin-top: 15px; text-align: center;">
+                        <a href="/download-template/reviews" style="padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; font-size: 12px;">📄 리뷰 템플릿 다운로드</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -959,25 +1015,45 @@ def reviewer_page(reviewer_name: str):
     
     conn.close()
     
-    # 배정된 업체 HTML
-    stores_html = ''
+    # 배정된 업체를 완료/진행중으로 분류
+    active_stores_html = ''
+    completed_stores_html = ''
+    
     for s in assigned_stores:
         my_store_reviews = len([r for r in my_reviews if r[1] == s[2]])
-        stores_html += f'''
-        <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #007bff;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div>
-                    <h4 style="margin: 0; color: #333; font-size: 18px;">{s[2]}</h4>
+        target_count = (s[4] or 1) * (s[5] or 30)  # 목표 갯수
+        
+        if my_store_reviews >= target_count:
+            # 완료된 업체
+            completed_stores_html += f'''
+            <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #28a745;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h4 style="margin: 0; color: #333; font-size: 16px;">{s[2]}</h4>
+                        <span style="padding: 2px 8px; background: #28a745; color: white; border-radius: 10px; font-size: 10px;">목표달성</span>
+                    </div>
+                    <div style="color: #155724; font-weight: 600;">✅ {my_store_reviews}/{target_count}</div>
                 </div>
-                <a href="/add-review-form/{reviewer_name}/{s[2]}" style="padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">+ 리뷰 추가</a>
-            </div>
-            <div style="color: #666; font-size: 14px;">
-                📊 내가 등록한 리뷰: {my_store_reviews}개
-            </div>
-        </div>'''
+            </div>'''
+        else:
+            # 진행중 업체
+            percentage = round((my_store_reviews / target_count) * 100) if target_count > 0 else 0
+            active_stores_html += f'''
+            <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #007bff;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div>
+                        <h4 style="margin: 0; color: #333; font-size: 18px;">{s[2]}</h4>
+                        <span style="color: #666; font-size: 12px;">목표: {target_count}개</span>
+                    </div>
+                    <a href="/add-review-form/{reviewer_name}/{s[2]}" style="padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">+ 리뷰 추가</a>
+                </div>
+                <div style="color: #666; font-size: 14px;">
+                    📊 진행: {my_store_reviews}/{target_count} ({percentage}%)
+                </div>
+            </div>'''
     
-    if not stores_html:
-        stores_html = '<p style="color: #999; text-align: center; padding: 40px;">배정된 업체가 없습니다. 관리자에게 업체 배정을 요청하세요.</p>'
+    if not active_stores_html and not completed_stores_html:
+        active_stores_html = '<p style="color: #999; text-align: center; padding: 40px;">배정된 업체가 없습니다. 관리자에게 업체 배정을 요청하세요.</p>'
     
     # 내 리뷰 테이블
     reviews_table = ''
@@ -1027,10 +1103,17 @@ def reviewer_page(reviewer_name: str):
             <a href="/" style="margin-top: 15px; display: inline-block; color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px;">로그아웃</a>
         </div>
         
+        <!-- 진행중 업체 -->
         <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 25px; margin-bottom: 25px;">
-            <h3 style="margin-bottom: 20px; color: #333;">🏪 담당 업체 목록</h3>
-            {stores_html}
+            <h3 style="margin-bottom: 20px; color: #333;">🚀 진행중 업체</h3>
+            {active_stores_html}
         </div>
+        
+        <!-- 완료된 업체 -->
+        {f'''<div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 25px; margin-bottom: 25px;">
+            <h3 style="margin-bottom: 20px; color: #333;">✅ 완료된 업체</h3>
+            {completed_stores_html}
+        </div>''' if completed_stores_html else ""}
         
         <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 25px;">
             <h3 style="margin-bottom: 20px; color: #333;">📝 내가 등록한 리뷰</h3>
@@ -1595,8 +1678,141 @@ async def submit_extend_admin(store_name: str = Form(), company_name: str = Form
     conn.close()
     return RedirectResponse(url="/admin", status_code=302)
 
+# 엑셀 업로드 관련 API
+from fastapi import UploadFile, File
+
+# 엑셀 템플릿 다운로드
+@app.get("/download-template/{template_type}")
+async def download_template(template_type: str):
+    if template_type == "stores":
+        csv_content = "고객사명,업체명,시작일,하루갯수,캠페인일수\n"
+        csv_content += "adsketch,스타벅스 강남점,2024-09-01,5,30\n"
+        csv_content += "studioview,맥도날드 서초점,2024-09-02,3,20\n"
+        filename = "stores_template.csv"
+    else:  # reviews
+        csv_content = "업체명,리뷰URL\n"
+        csv_content += "스타벅스 강남점,https://naver.me/5jBm0HYx\n"
+        csv_content += "맥도날드 서초점,https://m.place.naver.com/my/review/test\n"
+        filename = "reviews_template.csv"
+    
+    return Response(
+        content=csv_content.encode('utf-8-sig'),
+        media_type='application/octet-stream',
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# 업체 대량 업로드
+@app.post("/upload-stores")
+async def upload_stores(excel_file: UploadFile = File(...)):
+    try:
+        contents = await excel_file.read()
+        
+        if excel_file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+        
+        conn = sqlite3.connect(get_db_path())
+        cursor = conn.cursor()
+        
+        success_count = 0
+        error_list = []
+        
+        for index, row in df.iterrows():
+            try:
+                company_name = str(row.iloc[0]).strip()
+                store_name = str(row.iloc[1]).strip()
+                start_date = str(row.iloc[2]).strip() if pd.notna(row.iloc[2]) else ""
+                daily_count = int(row.iloc[3]) if pd.notna(row.iloc[3]) else 1
+                duration_days = int(row.iloc[4]) if pd.notna(row.iloc[4]) else 30
+                
+                cursor.execute('SELECT COUNT(*) FROM stores WHERE company_name = ? AND name = ?', (company_name, store_name))
+                if cursor.fetchone()[0] == 0:
+                    cursor.execute('INSERT INTO stores (company_name, name, start_date, daily_count, duration_days) VALUES (?, ?, ?, ?, ?)',
+                                  (company_name, store_name, start_date, daily_count, duration_days))
+                    success_count += 1
+                else:
+                    error_list.append(f"{store_name} (중복)")
+                    
+            except Exception as e:
+                error_list.append(f"행 {index + 2}: {str(e)}")
+        
+        conn.commit()
+        conn.close()
+        
+        return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>업체 등록 완료</title></head>
+<body style="font-family: Arial; text-align: center; padding: 50px;">
+    <h2 style="color: #28a745;">✅ 업체 {success_count}개 등록 완료</h2>
+    {"<div style='color: #dc3545; margin: 20px 0;'>오류: " + str(len(error_list)) + "개</div>" if error_list else ""}
+    <a href="/admin">관리자 페이지로</a>
+</body>
+</html>""")
+        
+    except Exception as e:
+        return HTMLResponse(f"<h2>업로드 실패: {str(e)}</h2><a href='/admin'>돌아가기</a>")
+
+# 리뷰 대량 업로드
+@app.post("/upload-reviews")
+async def upload_reviews(excel_file: UploadFile = File(...)):
+    try:
+        contents = await excel_file.read()
+        
+        if excel_file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+        
+        conn = sqlite3.connect(get_db_path())
+        cursor = conn.cursor()
+        
+        success_count = 0
+        error_list = []
+        
+        for index, row in df.iterrows():
+            try:
+                store_name = str(row.iloc[0]).strip()
+                review_url = str(row.iloc[1]).strip()
+                
+                # 업체 존재 확인
+                cursor.execute('SELECT COUNT(*) FROM stores WHERE name = ?', (store_name,))
+                if cursor.fetchone()[0] == 0:
+                    error_list.append(f"{store_name} (업체 없음)")
+                    continue
+                
+                # 중복 URL 체크
+                cursor.execute('SELECT COUNT(*) FROM reviews WHERE review_url = ?', (review_url,))
+                if cursor.fetchone()[0] == 0:
+                    cursor.execute('INSERT INTO reviews (store_name, review_url, registered_by, status) VALUES (?, ?, ?, "pending")',
+                                  (store_name, review_url, 'admin'))
+                    success_count += 1
+                else:
+                    error_list.append(f"{review_url[:50]}... (중복 URL)")
+                    
+            except Exception as e:
+                error_list.append(f"행 {index + 2}: {str(e)}")
+        
+        conn.commit()
+        conn.close()
+        
+        return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>리뷰 등록 완료</title></head>
+<body style="font-family: Arial; text-align: center; padding: 50px;">
+    <h2 style="color: #007bff;">✅ 리뷰 {success_count}개 등록 완료</h2>
+    {"<div style='color: #dc3545; margin: 20px 0;'>오류: " + str(len(error_list)) + "개</div>" if error_list else ""}
+    <a href="/admin">관리자 페이지로</a>
+</body>
+</html>""")
+        
+    except Exception as e:
+        return HTMLResponse(f"<h2>업로드 실패: {str(e)}</h2><a href='/admin'>돌아가기</a>")
+
 if __name__ == "__main__":
-    print("깔끔한 네이버 리뷰 관리 시스템")
+    print("리뷰 관리 시스템")
     print("접속: http://localhost:8000")
     print("단일 로그인: 사용자명만 입력하면 자동 등급 인식")
     port = int(os.getenv("PORT", 80))
