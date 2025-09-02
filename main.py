@@ -280,6 +280,13 @@ def admin_page():
         
         date_info = f'<span style="margin-left: 10px; color: #dc3545; font-weight: 600; font-size: 12px;">📅 {r[4]}</span>' if r[4] else ""
         
+        # 버튼 처리
+        action_buttons = ""
+        if r[5] == "pending":
+            action_buttons = f'<a href="/process-review/{r[0]}" style="padding: 4px 8px; background: #007bff; color: white; text-decoration: none; border-radius: 3px; font-size: 11px;">▶️ 추출</a>'
+        elif r[5] == "failed":
+            action_buttons = f'<a href="/retry-review/{r[0]}" style="padding: 4px 8px; background: #ffc107; color: #333; text-decoration: none; border-radius: 3px; font-size: 11px;">🔄 재시도</a>'
+        
         reviews_html += f'''<div style="padding: 12px; border-bottom: 1px solid #eee;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <div>
@@ -289,7 +296,7 @@ def admin_page():
                     {date_info}
                 </div>
                 <div style="display: flex; gap: 5px;">
-                    {process_button}
+                    {action_buttons}
                     <a href="/delete-review/{r[0]}" onclick="return confirm('이 리뷰를 삭제하시겠습니까?')" style="padding: 4px 8px; background: #dc3545; color: white; text-decoration: none; border-radius: 3px; font-size: 11px;">🗑️</a>
                 </div>
             </div>
@@ -987,13 +994,31 @@ async def download_store_csv(company_name: str, store_name: str):
         date_info = r[3] or (r[4] == 'pending' and '추출대기중' or '-')
         csv_content += f'"{r[0]}","{r[1]}","{content}","{date_info}"\n'
     
-    # 안전한 파일명 생성 (영문+숫자만)
-    safe_filename = re.sub(r'[^a-zA-Z0-9]', '_', store_name)
+    # 한글 업체명을 영문으로 변환하는 매핑
+    name_mapping = {
+        '쭈꾸미도사': 'Jjukkumi_Dosa',
+        '잘라주 클린뷰어': 'Jaraju_Cleanviewer', 
+        '스타벅스': 'Starbucks',
+        '맥도날드': 'McDonalds',
+        '버거킹': 'BurgerKing'
+    }
+    
+    # 파일명 생성 (한글 → 영문 변환)
+    safe_filename = store_name
+    for korean, english in name_mapping.items():
+        if korean in store_name:
+            safe_filename = safe_filename.replace(korean, english)
+    
+    # 나머지 특수문자 처리
+    safe_filename = re.sub(r'[^a-zA-Z0-9_]', '_', safe_filename)
     
     return Response(
         content=csv_content.encode('utf-8-sig'),
-        media_type='application/octet-stream',
-        headers={"Content-Disposition": f"attachment; filename={safe_filename}.csv"}
+        media_type='text/csv; charset=utf-8',
+        headers={
+            "Content-Disposition": f"attachment; filename={safe_filename}_report.csv",
+            "Content-Type": "text/csv; charset=utf-8"
+        }
     )
 
 @app.get("/reviewer/{reviewer_name}")
@@ -1824,6 +1849,35 @@ async def upload_reviews(excel_file: UploadFile = File(...)):
         
     except Exception as e:
         return HTMLResponse(f"<h2>업로드 실패: {str(e)}</h2><a href='/admin'>돌아가기</a>")
+
+@app.get("/retry-review/{review_id}")
+async def retry_review(review_id: int, background_tasks: BackgroundTasks):
+    # 실패한 리뷰를 pending 상태로 되돌리고 재추출
+    conn = sqlite3.connect(get_db_path())
+    cursor = conn.cursor()
+    cursor.execute('UPDATE reviews SET status = "pending" WHERE id = ?', (review_id,))
+    conn.commit()
+    conn.close()
+    
+    # 백그라운드에서 재추출
+    background_tasks.add_task(extract_review, review_id)
+    
+    return HTMLResponse("""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>재시도 시작</title></head>
+<body style="font-family: Arial; background: #f5f7fa; text-align: center; padding: 50px;">
+    <div style="background: white; padding: 40px; border-radius: 15px; max-width: 500px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+        <h2 style="color: #ffc107; margin-bottom: 20px;">🔄 리뷰 재추출 시작!</h2>
+        <p style="margin-bottom: 15px; font-size: 16px;">실패한 리뷰의 재추출을 시작합니다.</p>
+        <p style="margin-bottom: 25px; color: #666;">다른 방법으로 리뷰 내용을 찾아보겠습니다.</p>
+        <div style="margin-bottom: 25px; padding: 15px; background: #fff3cd; border-radius: 8px;">
+            <p style="margin: 0; color: #856404; font-weight: 600;">⏰ 약 30초 후 결과를 확인하세요</p>
+        </div>
+        <a href="/admin?tab=reviews" style="padding: 15px 30px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600;">리뷰 관리 탭으로</a>
+    </div>
+</body>
+</html>""")
 
 if __name__ == "__main__":
     print("리뷰 관리 시스템")
