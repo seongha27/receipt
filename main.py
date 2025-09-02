@@ -1817,8 +1817,12 @@ async def upload_reviews(excel_file: UploadFile = File(...)):
                 
                 # 업체 존재 확인
                 cursor.execute('SELECT COUNT(*) FROM stores WHERE name = ?', (store_name,))
-                if cursor.fetchone()[0] == 0:
-                    error_list.append(f"{store_name} (업체 없음)")
+                store_exists = cursor.fetchone()[0]
+                if store_exists == 0:
+                    # 등록된 업체명들도 함께 표시
+                    cursor.execute('SELECT DISTINCT name FROM stores LIMIT 5')
+                    existing_stores = [row[0] for row in cursor.fetchall()]
+                    error_list.append(f"{store_name} (업체 없음) - 등록된 업체: {', '.join(existing_stores)}...")
                     continue
                 
                 # 중복 URL 체크
@@ -1836,14 +1840,32 @@ async def upload_reviews(excel_file: UploadFile = File(...)):
         conn.commit()
         conn.close()
         
+        error_details = ""
+        if error_list:
+            error_details = "<div style='background: #f8d7da; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: left;'>"
+            error_details += "<h4 style='color: #721c24; margin-bottom: 15px;'>❌ 오류 상세 내용:</h4>"
+            for i, error in enumerate(error_list[:10]):  # 최대 10개만 표시
+                error_details += f"<p style='margin: 5px 0; color: #721c24; font-size: 14px;'>{i+1}. {error}</p>"
+            if len(error_list) > 10:
+                error_details += f"<p style='color: #721c24;'>... 외 {len(error_list) - 10}개 더</p>"
+            error_details += "</div>"
+        
         return HTMLResponse(f"""
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>리뷰 등록 완료</title></head>
-<body style="font-family: Arial; text-align: center; padding: 50px;">
-    <h2 style="color: #007bff;">✅ 리뷰 {success_count}개 등록 완료</h2>
-    {"<div style='color: #dc3545; margin: 20px 0;'>오류: " + str(len(error_list)) + "개</div>" if error_list else ""}
-    <a href="/admin">관리자 페이지로</a>
+<head><meta charset="UTF-8"><title>리뷰 등록 결과</title></head>
+<body style="font-family: Arial; padding: 20px;">
+    <div style="max-width: 800px; margin: 0 auto; text-align: center;">
+        <h2 style="color: #007bff;">📊 리뷰 등록 결과</h2>
+        <div style="background: #d4edda; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #155724;">✅ 성공: {success_count}개</h3>
+        </div>
+        <div style="background: #f8d7da; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #721c24;">❌ 실패: {len(error_list)}개</h3>
+        </div>
+        {error_details}
+        <a href="/admin?tab=upload" style="padding: 15px 30px; background: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600;">엑셀업로드 탭으로</a>
+    </div>
 </body>
 </html>""")
         
