@@ -1815,11 +1815,31 @@ async def upload_reviews(excel_file: UploadFile = File(...)):
                 store_name = str(row.iloc[0]).strip()
                 review_url = str(row.iloc[1]).strip()
                 
-                # 업체 존재 확인
-                cursor.execute('SELECT COUNT(*) FROM stores WHERE name = ?', (store_name,))
-                store_exists = cursor.fetchone()[0]
-                if store_exists == 0:
-                    # 등록된 업체명들도 함께 표시
+                # 업체 존재 확인 (정확한 매칭)
+                cursor.execute('SELECT name FROM stores WHERE name = ?', (store_name,))
+                exact_match = cursor.fetchone()
+                
+                matched_store = None
+                if exact_match:
+                    matched_store = exact_match[0]
+                else:
+                    # 부분 매칭 시도 (예: "황소양곱창 양재점" → "황소양곱창 양재점 라이징힐즈")
+                    cursor.execute('SELECT name FROM stores WHERE name LIKE ?', (f"%{store_name}%",))
+                    partial_match = cursor.fetchone()
+                    if partial_match:
+                        matched_store = partial_match[0]
+                        print(f"부분 매칭 성공: '{store_name}' → '{matched_store}'")
+                    else:
+                        # 역방향 매칭 (예: "황소양곱창 양재점 라이징힐즈" → "황소양곱창 양재점")
+                        cursor.execute('SELECT name FROM stores')
+                        all_stores = cursor.fetchall()
+                        for store_row in all_stores:
+                            if store_name in store_row[0]:
+                                matched_store = store_row[0]
+                                print(f"역방향 매칭 성공: '{store_name}' → '{matched_store}'")
+                                break
+                
+                if not matched_store:
                     cursor.execute('SELECT DISTINCT name FROM stores LIMIT 5')
                     existing_stores = [row[0] for row in cursor.fetchall()]
                     error_list.append(f"{store_name} (업체 없음) - 등록된 업체: {', '.join(existing_stores)}...")
@@ -1829,7 +1849,7 @@ async def upload_reviews(excel_file: UploadFile = File(...)):
                 cursor.execute('SELECT COUNT(*) FROM reviews WHERE review_url = ?', (review_url,))
                 if cursor.fetchone()[0] == 0:
                     cursor.execute('INSERT INTO reviews (store_name, review_url, registered_by, status) VALUES (?, ?, ?, "pending")',
-                                  (store_name, review_url, 'admin'))
+                                  (matched_store, review_url, 'admin'))  # matched_store 사용
                     success_count += 1
                 else:
                     error_list.append(f"{review_url[:50]}... (중복 URL)")
