@@ -880,41 +880,82 @@ def company_page(company_name: str):
                 }}
             
             // 업체별 리뷰 펼쳐보기/접기
-            function toggleStoreReviews(storeName) {{
+            async function toggleStoreReviews(storeName) {{
                 const reviewsDiv = document.getElementById('reviews_' + storeName.replace(/\s+/g, '_'));
                 const container = document.querySelector(`[data-store="${{storeName}}"]`);
+                const button = event.target;
                 
                 if (reviewsDiv.style.display === 'none') {{
-                    // 펼치기 - 리뷰 데이터 로드
+                    // 펼치기 - 서버에서 해당 업체 리뷰 데이터 가져오기
                     reviewsDiv.style.display = 'block';
+                    button.innerText = '🔼 접기';
+                    container.innerHTML = '<div style="text-align: center; padding: 20px;"><div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #f3f3f3; border-top: 2px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;"></div><p>로딩중...</p></div>';
                     
-                    // 해당 업체의 리뷰만 필터링해서 표시
-                    const allReviews = document.querySelectorAll('.review-row');
-                    let storeReviewsHtml = '<div style="max-height: 300px; overflow-y: auto;">';
-                    
-                    let hasReviews = false;
-                    allReviews.forEach(row => {{
-                        if (row.dataset.store === storeName) {{
-                            storeReviewsHtml += row.outerHTML;
-                            hasReviews = true;
+                    try {{
+                        const response = await fetch(`/api/store-reviews/${{encodeURIComponent(storeName)}}`);
+                        const data = await response.json();
+                        
+                        let reviewsHtml = '<div style="max-height: 400px; overflow-y: auto;">';
+                        
+                        if (data.length > 0) {{
+                            // 영수증 날짜 기준 정렬 (최신순)
+                            data.sort((a, b) => {{
+                                const dateA = a.extracted_date || '0000.00.00';
+                                const dateB = b.extracted_date || '0000.00.00';
+                                return dateB.localeCompare(dateA);
+                            }});
+                            
+                            data.forEach((review, index) => {{
+                                const statusColor = review.status === 'completed' ? '#28a745' : review.status === 'pending' ? '#ffc107' : '#dc3545';
+                                const statusText = review.status === 'completed' ? '완료' : review.status === 'pending' ? '대기' : '실패';
+                                
+                                reviewsHtml += `
+                                <div style="background: ${{review.status === 'completed' ? '#f8f9fa' : '#fff3cd'}}; margin-bottom: 12px; padding: 15px; border-radius: 8px; border-left: 4px solid ${{statusColor}};">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <div>
+                                            <span style="font-weight: 600; color: #333;">리뷰 ${{index + 1}}</span>
+                                            <span style="margin-left: 10px; padding: 2px 8px; background: ${{statusColor}}; color: white; border-radius: 10px; font-size: 10px; font-weight: 600;">${{statusText}}</span>
+                                            <span style="margin-left: 10px; color: #dc3545; font-weight: 600; font-size: 13px;">📅 ${{review.extracted_date || '-'}}</span>
+                                        </div>
+                                        <a href="${{review.review_url}}" target="_blank" style="padding: 4px 8px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 10px;">🔗 원본</a>
+                                    </div>
+                                    <div style="color: #666; font-size: 11px; margin-bottom: 8px;">
+                                        <strong>URL:</strong> ${{review.review_url.substring(0, 50)}}...
+                                    </div>
+                                    ${{review.extracted_text ? `
+                                    <div style="background: white; padding: 12px; border-radius: 6px; font-size: 13px; line-height: 1.5; color: #333;">
+                                        ${{review.extracted_text}}
+                                    </div>` : `
+                                    <div style="background: #e9ecef; padding: 10px; border-radius: 6px; text-align: center; color: #666; font-style: italic;">
+                                        ${{review.status === 'pending' ? '추출 대기중' : '추출 실패 또는 내용 없음'}}
+                                    </div>`}}
+                                </div>`;
+                            }});
+                        }} else {{
+                            reviewsHtml += '<div style="text-align: center; padding: 40px; color: #999;"><p style="font-size: 16px;">📭 등록된 리뷰가 없습니다</p><p style="font-size: 12px;">리뷰어가 URL을 등록하면 여기에 표시됩니다</p></div>';
                         }}
-                    }});
-                    
-                    if (!hasReviews) {{
-                        storeReviewsHtml += '<p style="text-align: center; color: #999; padding: 20px;">등록된 리뷰가 없습니다</p>';
+                        
+                        reviewsHtml += '</div>';
+                        container.innerHTML = reviewsHtml;
+                    }} catch (error) {{
+                        container.innerHTML = '<p style="color: #dc3545; text-align: center; padding: 20px;">데이터 로드 실패</p>';
                     }}
-                    
-                    storeReviewsHtml += '</div>';
-                    container.innerHTML = storeReviewsHtml;
-                    
-                    // 버튼 텍스트 변경
-                    event.target.innerText = '🔼 접기';
                 }} else {{
                     // 접기
                     reviewsDiv.style.display = 'none';
-                    event.target.innerText = '👁️ 리뷰보기';
+                    button.innerText = '👁️ 리뷰보기';
                 }}
             }}
+            
+            // CSS 애니메이션 추가
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes spin {{
+                    0% {{ transform: rotate(0deg); }}
+                    100% {{ transform: rotate(360deg); }}
+                }}
+            `;
+            document.head.appendChild(style);
             </script>
             
             <!-- 전체 리뷰 목록 -->
@@ -1415,8 +1456,12 @@ def extract_review(review_id: int):
                 print("로컬 환경에서 일반 모드로 실행")
             
             driver = webdriver.Chrome(options=options)
-            driver.implicitly_wait(5)
+            driver.implicitly_wait(10)
+            driver.set_page_load_timeout(30)
+            
+            print(f"Chrome 실행 성공, URL 접속 시작: {review_url}")
             driver.get(review_url)
+            print("페이지 로딩 완료")
             
             if "/my/review/" in review_url:
                 # 직접 리뷰 링크
@@ -1517,8 +1562,10 @@ def extract_review(review_id: int):
                 print(f"추출 실패: {store_name} - {status}")
             
         except Exception as e:
-            print(f"추출 실패: {e}")
+            print(f"Chrome 실행 실패: {e}")
             cursor.execute('UPDATE reviews SET status = "failed" WHERE id = ?', (review_id,))
+            # 오류 메시지도 저장
+            cursor.execute('UPDATE reviews SET extracted_text = ? WHERE id = ?', (f"Chrome 실행 오류: {str(e)}", review_id))
         
         conn.commit()
         
@@ -1934,6 +1981,37 @@ async def upload_reviews(excel_file: UploadFile = File(...)):
         
     except Exception as e:
         return HTMLResponse(f"<h2>업로드 실패: {str(e)}</h2><a href='/admin'>돌아가기</a>")
+
+@app.get("/api/store-reviews/{store_name}")
+async def get_store_reviews(store_name: str):
+    """특정 업체의 리뷰 목록 반환 (날짜순 정렬)"""
+    conn = sqlite3.connect(get_db_path())
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT id, store_name, review_url, extracted_text, extracted_date, status, registered_by, created_at
+        FROM reviews 
+        WHERE store_name = ? 
+        ORDER BY 
+            CASE 
+                WHEN extracted_date IS NOT NULL AND extracted_date != '' THEN extracted_date 
+                ELSE created_at 
+            END DESC
+    ''', (store_name,))
+    
+    reviews = cursor.fetchall()
+    conn.close()
+    
+    return [{
+        "id": r[0],
+        "store_name": r[1], 
+        "review_url": r[2],
+        "extracted_text": r[3],
+        "extracted_date": r[4],
+        "status": r[5],
+        "registered_by": r[6],
+        "created_at": r[7]
+    } for r in reviews]
 
 @app.get("/retry-review/{review_id}")
 async def retry_review(review_id: int, background_tasks: BackgroundTasks):
