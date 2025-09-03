@@ -189,13 +189,16 @@ def draw_receipt(store_info, date, hour, minute, second, receipt_id, menu_pool):
     ]:
         draw.text((30, y), line, font=font, fill="black"); y += 55
 
-    # EXIF 데이터 추가 (원본과 동일)
-    device = random.choice(DEVICE_LIST)
-    exif_dict = piexif.load(image.info.get("exif", piexif.dump({})))
-    exif_dict["0th"][piexif.ImageIFD.Make] = device[0].encode()
-    exif_dict["0th"][piexif.ImageIFD.Model] = device[1].encode()
-    exif_bytes = piexif.dump(exif_dict)
-    image.info["exif"] = exif_bytes
+    # EXIF 데이터 추가 (안전한 처리)
+    try:
+        device = random.choice(DEVICE_LIST)
+        exif_dict = piexif.load(image.info.get("exif", piexif.dump({})))
+        exif_dict["0th"][piexif.ImageIFD.Make] = device[0].encode()
+        exif_dict["0th"][piexif.ImageIFD.Model] = device[1].encode()
+        exif_bytes = piexif.dump(exif_dict)
+        image.info["exif"] = exif_bytes
+    except Exception as e:
+        print(f"EXIF 처리 오류: {e}, EXIF 없이 진행")
 
     return image
 
@@ -221,7 +224,11 @@ def generate_receipts_batch_web(store_info, menu_pool, start_date, end_date, dai
             )
             
             img_io = io.BytesIO()
-            img.save(img_io, format="JPEG", exif=img.info.get("exif"))
+            try:
+                img.save(img_io, format="JPEG", exif=img.info.get("exif"))
+            except Exception as e:
+                print(f"JPEG+EXIF 저장 실패: {e}, JPEG만으로 저장")
+                img.save(img_io, format="JPEG", quality=95)
             img_io.seek(0)
             
             file_name = f"receipt_{n * daily_count + i + 1}.jpg"
