@@ -357,6 +357,11 @@ def admin_page():
             newUrl.searchParams.set('tab', tab);
             window.history.pushState({{}}, '', newUrl);
         }}
+        
+        function openReceiptGenerator() {{
+            // 새 탭에서 영수증생성기 열기
+            window.open('/admin/receipt-generator', '_blank');
+        }}
     </script>
 </head>
 <body style="font-family: Arial; background: #f5f7fa; margin: 0; padding: 20px;">
@@ -375,7 +380,8 @@ def admin_page():
                 <button onclick="showTabWithUrl('reviewers')" id="reviewersBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">👤 리뷰어</button>
                 <button onclick="showTabWithUrl('assignments')" id="assignmentsBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🔗 배정</button>
                 <button onclick="showTabWithUrl('reviews')" id="reviewsBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📝 리뷰</button>
-                <button onclick="showTabWithUrl('upload')" id="uploadBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📊 엑셀업로드</button>
+                <button onclick="showTabWithUrl('upload')" id="uploadBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📊 엑셀업로드</button>
+                <button onclick="openReceiptGenerator()" id="receiptBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🧾 영수증생성</button>
             </div>
 
             <!-- 고객사 관리 -->
@@ -2106,13 +2112,18 @@ async def retry_review(review_id: int, background_tasks: BackgroundTasks):
 </body>
 </html>""")
 
-# 관리자 권한 체크 함수
+# 관리자 권한 체크 함수 (수정됨)
 def get_admin_user(request: Request):
     """관리자 권한 확인"""
-    # 세션이 없는 경우 쿠키에서 확인
+    # 쿠키에서 확인
     username = request.cookies.get('username')
+    if not username:
+        # 리다이렉트를 위한 현재 URL 저장
+        raise HTTPException(status_code=302, headers={"location": "/"})
+    
     if username == 'admin':
         return {"username": "admin", "role": "admin"}
+    
     raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
 
 # ==================== 영수증 생성기 라우트 ====================
