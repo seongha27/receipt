@@ -2112,25 +2112,27 @@ async def retry_review(review_id: int, background_tasks: BackgroundTasks):
 </body>
 </html>""")
 
-# 관리자 권한 체크 함수 (수정됨)
-def get_admin_user(request: Request):
-    """관리자 권한 확인"""
-    # 쿠키에서 확인
+# 관리자 권한 체크 함수 (쿠키 방식)
+async def get_admin_user(request: Request):
+    """관리자 권한 확인 - 쿠키 기반"""
     username = request.cookies.get('username')
-    if not username:
-        # 리다이렉트를 위한 현재 URL 저장
-        raise HTTPException(status_code=302, headers={"location": "/"})
-    
     if username == 'admin':
         return {"username": "admin", "role": "admin"}
     
-    raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+    # admin이 아니면 로그인 페이지로 리다이렉트
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/", status_code=302)
 
 # ==================== 영수증 생성기 라우트 ====================
 
 @app.get("/admin/receipt-generator")
-async def receipt_generator_page(request: Request, admin_user=Depends(get_admin_user)):
+async def receipt_generator_page(request: Request):
     """관리자 전용 영수증생성기 페이지"""
+    # 쿠키로 관리자 확인
+    username = request.cookies.get('username')
+    if username != 'admin':
+        return RedirectResponse(url="/", status_code=302)
+    
     return HTMLResponse(content="""
     <!DOCTYPE html>
     <html lang="ko">
@@ -2278,8 +2280,13 @@ async def receipt_generator_page(request: Request, admin_user=Depends(get_admin_
     """)
 
 @app.post("/admin/api/fetch-menu")
-async def fetch_menu(request: Request, admin_user=Depends(get_admin_user)):
+async def fetch_menu(request: Request):
     """네이버 플레이스에서 메뉴 추출 API"""
+    # 관리자 확인
+    username = request.cookies.get('username')
+    if username != 'admin':
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+    
     data = await request.json()
     place_url = data.get('place_url')
     
@@ -2304,8 +2311,13 @@ async def fetch_menu(request: Request, admin_user=Depends(get_admin_user)):
         return {"success": False, "error": f"서버 오류: {str(e)}"}
 
 @app.post("/admin/api/generate-receipts")
-async def generate_receipts(request: Request, admin_user=Depends(get_admin_user)):
+async def generate_receipts(request: Request):
     """영수증 생성 및 ZIP 다운로드 API"""
+    # 관리자 확인
+    username = request.cookies.get('username')
+    if username != 'admin':
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+    
     data = await request.json()
     
     store_name = data.get('store_name', '').strip()
