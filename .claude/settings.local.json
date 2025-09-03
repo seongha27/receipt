@@ -68,6 +68,10 @@
       "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
       "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
       "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
+      "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
+      "Bash(dir \"C:\\Users\\wlstn\\Desktop\\영수증생성기_배포\\fonts\")",
+      "Bash(powershell:*)",
+      "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
       "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)"
     ],
     "deny": [],

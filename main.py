@@ -805,16 +805,10 @@ def admin_page():
             }}
 
             try {{
-                const response = await fetch('/admin/api/fetch-menu', {{
-                    method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ place_url: placeUrl }})
-                }});
-
+                const response = await fetch(`/api/get_naver_menu?url=${{encodeURIComponent(placeUrl)}}`);
                 const data = await response.json();
                 
                 if (data.success) {{
-                    document.getElementById('storeName').value = data.store_name;
                     document.getElementById('menuText').value = data.menu_text;
                     updateMenuCount();
                     alert(`메뉴 ${{data.total_count}}개를 성공적으로 추출했습니다!`);
@@ -3185,8 +3179,10 @@ async def get_naver_menu_api(url: str):
         if not url or 'naver.com' not in url:
             raise HTTPException(status_code=400, detail='유효한 네이버 플레이스 URL을 입력해주세요.')
         
-        # 메뉴 추출
+        # 메뉴 추출 (리스트 반환)
         menu_items = get_naver_place_menu(url)
+        print(f"[DEBUG] 추출된 메뉴 타입: {type(menu_items)}")
+        print(f"[DEBUG] 추출된 메뉴: {menu_items}")
         
         # 7글자 필터 적용
         menu_text = format_menu_for_textarea(menu_items, apply_filter=True)
@@ -3198,6 +3194,9 @@ async def get_naver_menu_api(url: str):
         }
         
     except Exception as e:
+        print(f"[ERROR] 메뉴 추출 API 오류: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
