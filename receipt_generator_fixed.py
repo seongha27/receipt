@@ -22,8 +22,12 @@ CARD_PREFIXES = {
 KOREAN_CARD_COMPANIES = list(CARD_PREFIXES.items())
 
 def ensure_font():
+    print(f"[DEBUG] 폰트 경로 확인: {font_path}")
     if not os.path.exists(font_path):
-        raise FileNotFoundError(f"폰트 파일을 찾을 수 없습니다: {font_path}")
+        print(f"[ERROR] 폰트 파일을 찾을 수 없습니다: {font_path}")
+        return False
+    print(f"[SUCCESS] 폰트 파일 발견: {font_path}")
+    return True
 
 ensure_font()
 

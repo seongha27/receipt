@@ -3207,4 +3207,4 @@ if __name__ == "__main__":
     print("네이버 메뉴 추출 API: GET /api/get_naver_menu?url=...")
     print("단일 로그인: 사용자명만 입력하면 자동 등급 인식")
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="debug")
