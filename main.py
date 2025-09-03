@@ -13,10 +13,12 @@ import zipfile
 from typing import List, Optional
 from werkzeug.utils import secure_filename
 
-# 영수증생성기 모듈 import (수정된 버전)
+# 영수증생성기 모듈 import (안정성 우선 - 기존 방식)
+from receipt_generator_module import (
+    create_receipts_zip, smart_filter_menu, create_receipt_image_full
+)
 from receipt_generator_fixed import (
-    parse_menu_input, generate_receipts_batch_web, 
-    smart_filter_menu
+    parse_menu_input
 )
 from naver_scraper_full import get_naver_place_menu, format_menu_for_textarea
 from excel_parser import parse_excel_file
@@ -1027,9 +1029,26 @@ def admin_page():
                 generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 생성 중...';
                 generateBtn.disabled = true;
                 
-                const response = await fetch('/api/generate_advanced_receipts', {{
+                // JSON 형태로 데이터 준비 (기존 API 방식 사용)
+                const jsonData = {{
+                    store_name: formData.get('store_name'),
+                    biz_num: formData.get('biz_num'),
+                    owner_name: formData.get('owner_name'),
+                    phone: formData.get('phone'),
+                    address: formData.get('address'),
+                    menu_text: formData.get('menu_list'),
+                    start_date: formData.get('start_date'),
+                    end_date: formData.get('end_date'),
+                    daily_count: parseInt(formData.get('daily_count')),
+                    start_hour: parseInt(formData.get('start_hour')),
+                    end_hour: parseInt(formData.get('end_hour')),
+                    apply_filter: formData.get('apply_menu_filter') === 'true'
+                }};
+
+                const response = await fetch('/admin/api/generate-receipts-full', {{
                     method: 'POST',
-                    body: formData
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify(jsonData)
                 }});
 
                 if (response.ok) {{
@@ -2897,6 +2916,15 @@ async def generate_receipts_full(request: Request):
         from datetime import datetime, timedelta
         import random
         
+        # 업체 정보 구성 (새로운 방식)
+        store_info = {
+            '상호명': store_name,
+            '사업자번호': biz_num,
+            '대표자명': owner_name,
+            '전화번호': phone,
+            '주소': address
+        }
+        
         # 메뉴 파싱
         menu_pool = parse_menu_input(menu_text, apply_filter=apply_filter)
         
@@ -2907,6 +2935,7 @@ async def generate_receipts_full(request: Request):
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
         end_dt = datetime.strptime(end_date, '%Y-%m-%d')
         
+        # 기존 방식 유지 (안정성 우선)
         receipts = []
         current_date = start_dt
         
@@ -2921,16 +2950,10 @@ async def generate_receipts_full(request: Request):
                 selected_menus = random.sample(menu_pool, min(random.randint(1, 3), len(menu_pool)))
                 total_amount = sum(price for _, price in selected_menus)
                 
-                # 영수증 이미지 생성 (업체 정보 포함)
+                # 기존의 단순한 영수증 생성 방식 사용
                 receipt_img = create_receipt_image_full(
-                    store_name=store_name,
-                    biz_num=biz_num,
-                    owner_name=owner_name,
-                    phone=phone,
-                    address=address,
-                    menu_items=selected_menus,
-                    total_amount=total_amount,
-                    receipt_date=receipt_datetime
+                    store_name, biz_num, owner_name, phone, address,
+                    selected_menus, total_amount, receipt_datetime
                 )
                 
                 # 이미지를 바이트로 변환
@@ -2948,7 +2971,7 @@ async def generate_receipts_full(request: Request):
             
             current_date += timedelta(days=1)
         
-        # ZIP 파일 생성
+        # 기존 ZIP 생성 방식 사용
         zip_buffer = create_receipts_zip(receipts)
         
         # 임시 파일로 저장
