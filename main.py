@@ -2635,7 +2635,7 @@ async def retry_review(review_id: int, background_tasks: BackgroundTasks):
 # 관리자 권한 체크 함수 (쿠키 방식)
 async def get_admin_user(request: Request):
     """관리자 권한 확인 - 쿠키 기반"""
-    username = request.cookies.get('username')
+    # username = request.cookies.get('username')  # 비활성화
     if username == 'admin':
         return {"username": "admin", "role": "admin"}
     
@@ -2649,7 +2649,7 @@ async def get_admin_user(request: Request):
 async def receipt_generator_page(request: Request):
     """관리자 전용 영수증생성기 페이지"""
     # 쿠키로 관리자 확인
-    username = request.cookies.get('username')
+    # username = request.cookies.get('username')  # 비활성화
     if username != 'admin':
         return RedirectResponse(url="/", status_code=302)
     
@@ -2834,7 +2834,7 @@ async def fetch_menu(request: Request):
 async def generate_receipts(request: Request):
     """영수증 생성 및 ZIP 다운로드 API"""
     # 관리자 확인
-    username = request.cookies.get('username')
+    # username = request.cookies.get('username')  # 비활성화
     if username != 'admin':
         raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
     
