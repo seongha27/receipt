@@ -833,34 +833,209 @@ def admin_page():
         }}
 
         document.getElementById('menuText').addEventListener('input', updateMenuCount);
+        
+        // 파일 업로드 기능
+        setupFileUpload();
+        
+        function setupFileUpload() {{
+            // 엑셀 파일 업로드
+            const excelDropArea = document.getElementById('excelDropArea');
+            const excelInput = document.getElementById('excelInput');
+            
+            excelDropArea.addEventListener('click', () => excelInput.click());
+            
+            excelDropArea.addEventListener('dragover', (e) => {{
+                e.preventDefault();
+                excelDropArea.style.borderColor = '#007bff';
+                excelDropArea.style.backgroundColor = '#e7f1ff';
+            }});
+            
+            excelDropArea.addEventListener('dragleave', (e) => {{
+                e.preventDefault();
+                excelDropArea.style.borderColor = '#dee2e6';
+                excelDropArea.style.backgroundColor = '#f8f9fa';
+            }});
+            
+            excelDropArea.addEventListener('drop', (e) => {{
+                e.preventDefault();
+                excelDropArea.style.borderColor = '#dee2e6';
+                excelDropArea.style.backgroundColor = '#f8f9fa';
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {{
+                    excelInput.files = files;
+                    displayExcelFiles(files);
+                }}
+            }});
+            
+            excelInput.addEventListener('change', (e) => {{
+                displayExcelFiles(e.target.files);
+            }});
+            
+            // 사진 파일 업로드
+            const photoDropArea = document.getElementById('photoDropArea');
+            const photoInput = document.getElementById('photoInput');
+            
+            photoDropArea.addEventListener('click', () => photoInput.click());
+            
+            photoDropArea.addEventListener('dragover', (e) => {{
+                e.preventDefault();
+                photoDropArea.style.borderColor = '#007bff';
+                photoDropArea.style.backgroundColor = '#e7f1ff';
+            }});
+            
+            photoDropArea.addEventListener('dragleave', (e) => {{
+                e.preventDefault();
+                photoDropArea.style.borderColor = '#dee2e6';
+                photoDropArea.style.backgroundColor = '#f8f9fa';
+            }});
+            
+            photoDropArea.addEventListener('drop', (e) => {{
+                e.preventDefault();
+                photoDropArea.style.borderColor = '#dee2e6';
+                photoDropArea.style.backgroundColor = '#f8f9fa';
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {{
+                    photoInput.files = files;
+                    displayPhotoFiles(files);
+                }}
+            }});
+            
+            photoInput.addEventListener('change', (e) => {{
+                displayPhotoFiles(e.target.files);
+            }});
+        }}
+        
+        function displayExcelFiles(files) {{
+            const excelList = document.getElementById('excelList');
+            excelList.innerHTML = '';
+            
+            if (files.length > 0) {{
+                const file = files[0];
+                const fileItem = document.createElement('div');
+                fileItem.style.cssText = 'margin-top: 10px; padding: 10px; background: #e8f5e8; border-radius: 5px;';
+                fileItem.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <i class="fas fa-file-excel" style="color: #28a745; margin-right: 8px;"></i>
+                            <strong>${{file.name}}</strong>
+                            <small style="color: #6c757d;">(${{Math.round(file.size / 1024)}}KB)</small>
+                        </div>
+                        <button onclick="clearExcelFile()" style="background: #dc3545; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+                excelList.appendChild(fileItem);
+            }}
+        }}
+        
+        function displayPhotoFiles(files) {{
+            const photoList = document.getElementById('photoList');
+            photoList.innerHTML = '';
+            
+            if (files.length > 0) {{
+                const container = document.createElement('div');
+                container.style.cssText = 'margin-top: 10px;';
+                
+                for (let i = 0; i < files.length; i++) {{
+                    const file = files[i];
+                    const fileItem = document.createElement('div');
+                    fileItem.style.cssText = 'margin-bottom: 8px; padding: 8px; background: #e7f1ff; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;';
+                    fileItem.innerHTML = `
+                        <div>
+                            <span style="background: #007bff; color: white; padding: 2px 8px; border-radius: 3px; font-size: 12px; margin-right: 8px;">${{i + 1}}</span>
+                            <i class="fas fa-image" style="color: #007bff; margin-right: 5px;"></i>
+                            <strong>${{file.name}}</strong>
+                            <small style="color: #6c757d;">(${{Math.round(file.size / 1024)}}KB)</small>
+                        </div>
+                    `;
+                    container.appendChild(fileItem);
+                }}
+                
+                const clearBtn = document.createElement('button');
+                clearBtn.onclick = clearPhotoFiles;
+                clearBtn.style.cssText = 'margin-top: 5px; background: #dc3545; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer;';
+                clearBtn.innerHTML = '<i class="fas fa-times"></i> 모든 사진 삭제';
+                container.appendChild(clearBtn);
+                
+                photoList.appendChild(container);
+            }}
+        }}
+        
+        function clearExcelFile() {{
+            document.getElementById('excelInput').value = '';
+            document.getElementById('excelList').innerHTML = '';
+        }}
+        
+        function clearPhotoFiles() {{
+            document.getElementById('photoInput').value = '';
+            document.getElementById('photoList').innerHTML = '';
+        }}
 
         async function generateReceipts() {{
-            const formData = {{
-                store_name: document.getElementById('storeName').value,
-                biz_num: document.getElementById('bizNum').value,
-                owner_name: document.getElementById('ownerName').value,
-                phone: document.getElementById('phone').value,
-                address: document.getElementById('address').value,
-                menu_text: document.getElementById('menuText').value,
-                start_date: document.getElementById('startDate').value,
-                end_date: document.getElementById('endDate').value,
-                daily_count: parseInt(document.getElementById('dailyCount').value),
-                start_hour: parseInt(document.getElementById('startHour').value),
-                end_hour: parseInt(document.getElementById('endHour').value),
-                apply_filter: document.getElementById('applyMenuFilter').checked
-            }};
+            // FormData 객체 생성 (파일 업로드 지원)
+            const formData = new FormData();
+            
+            // 기본 정보 추가
+            formData.append('store_name', document.getElementById('storeName').value);
+            formData.append('biz_num', document.getElementById('bizNum').value);
+            formData.append('owner_name', document.getElementById('ownerName').value);
+            formData.append('phone', document.getElementById('phone').value);
+            formData.append('address', document.getElementById('address').value);
+            formData.append('menu_list', document.getElementById('menuText').value);
+            formData.append('start_date', document.getElementById('startDate').value);
+            formData.append('end_date', document.getElementById('endDate').value);
+            formData.append('daily_count', document.getElementById('dailyCount').value);
+            formData.append('start_hour', document.getElementById('startHour').value);
+            formData.append('end_hour', document.getElementById('endHour').value);
+            formData.append('apply_menu_filter', document.getElementById('applyMenuFilter').checked);
+            
+            // 엑셀 파일 처리
+            const excelInput = document.getElementById('excelInput');
+            const useExcel = excelInput.files.length > 0;
+            formData.append('use_excel', useExcel);
+            if (useExcel) {{
+                formData.append('excel_file', excelInput.files[0]);
+            }}
+            
+            // 사진 파일들 처리
+            const photoInput = document.getElementById('photoInput');
+            if (photoInput.files.length > 0) {{
+                for (let i = 0; i < photoInput.files.length; i++) {{
+                    formData.append('photos', photoInput.files[i]);
+                }}
+            }}
+            
+            // 텍스트 내용 (빈 값으로 설정, 향후 확장 가능)
+            formData.append('text_content', '');
 
             // 필수 필드 검증
-            if (!formData.store_name || !formData.biz_num || !formData.owner_name || !formData.phone || !formData.address || !formData.menu_text || !formData.start_date || !formData.end_date) {{
+            const storeName = formData.get('store_name');
+            const bizNum = formData.get('biz_num');
+            const ownerName = formData.get('owner_name');
+            const phone = formData.get('phone');
+            const address = formData.get('address');
+            const menuList = formData.get('menu_list');
+            const startDate = formData.get('start_date');
+            const endDate = formData.get('end_date');
+            
+            if (!storeName || !bizNum || !ownerName || !phone || !address || !menuList || !startDate || !endDate) {{
                 alert('모든 필수 항목을 입력해주세요.');
                 return;
             }}
 
             try {{
-                const response = await fetch('/admin/api/generate-receipts-full', {{
+                // 로딩 상태 표시
+                const generateBtn = document.querySelector('button[onclick="generateReceipts()"]');
+                const originalText = generateBtn.innerHTML;
+                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 생성 중...';
+                generateBtn.disabled = true;
+                
+                const response = await fetch('/api/generate_advanced_receipts', {{
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify(formData)
+                    body: formData
                 }});
 
                 if (response.ok) {{
@@ -868,23 +1043,42 @@ def admin_page():
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `receipts_${{formData.store_name}}_${{new Date().getTime()}}.zip`;
+                    a.download = `${{storeName}}_고급영수증_${{new Date().getTime()}}.zip`;
                     a.click();
                     window.URL.revokeObjectURL(url);
 
-                    const start = new Date(formData.start_date);
-                    const end = new Date(formData.end_date);
+                    const start = new Date(startDate);
+                    const end = new Date(endDate);
                     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-                    const total = days * formData.daily_count;
+                    const total = days * parseInt(formData.get('daily_count'));
                     
-                    document.getElementById('receiptResultText').innerHTML = `<strong>${{total}}개</strong>의 영수증이 생성되어 다운로드되었습니다.`;
+                    let resultText = `<strong>${{total}}개</strong>의 영수증이 생성되어 다운로드되었습니다.`;
+                    
+                    // 추가 기능 안내
+                    if (useExcel) {{
+                        resultText += '<br>📊 엑셀 데이터와 통합됨';
+                    }}
+                    if (photoInput.files.length > 0) {{
+                        resultText += `<br>📷 ${{photoInput.files.length}}개 사진 포함됨`;
+                    }}
+                    
+                    document.getElementById('receiptResultText').innerHTML = resultText;
                     document.getElementById('receiptResult').style.display = 'block';
                 }} else {{
                     const error = await response.json();
                     alert(`오류: ${{error.detail}}`);
                 }}
+                
+                // 버튼 복구
+                generateBtn.innerHTML = originalText;
+                generateBtn.disabled = false;
+                
             }} catch (error) {{
                 alert(`오류: ${{error.message}}`);
+                // 버튼 복구
+                const generateBtn = document.querySelector('button[onclick="generateReceipts()"]');
+                generateBtn.innerHTML = '<i class="fas fa-magic"></i> 영수증 생성하기';
+                generateBtn.disabled = false;
             }}
         }}
     </script>
