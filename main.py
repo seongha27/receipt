@@ -18,7 +18,7 @@ from receipt_generator_module import (
     parse_menu_input, generate_receipts_batch_web, 
     create_receipts_zip, smart_filter_menu
 )
-from naver_scraper_module import get_naver_place_menu, format_menu_for_textarea
+from naver_scraper_full import get_naver_place_menu, format_menu_for_textarea
 from excel_parser import parse_excel_file
 from utils import remove_image_metadata, parse_text_to_files, allowed_file
 

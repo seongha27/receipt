@@ -64,7 +64,11 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Read(C:\\Users\\wlstn\\Desktop/**)",
-      "Read(C:\\Users\\wlstn\\Desktop/**)"
+      "Read(C:\\Users\\wlstn\\Desktop/**)",
+      "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
+      "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
+      "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)",
+      "Read(C:\\Users\\wlstn\\Desktop\\영수증생성기_배포/**)"
     ],
     "deny": [],
     "ask": []
