@@ -9,3 +9,6 @@ openpyxl
 pillow
 piexif
 webdriver-manager
+werkzeug
+flask
+numpy

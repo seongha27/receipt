@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, BackgroundTasks, UploadFile, File, HTTPException, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, FileResponse, StreamingResponse
 import uvicorn
 import sqlite3
 import hashlib
@@ -9,6 +9,9 @@ import pandas as pd
 import io
 from datetime import datetime, timedelta
 import tempfile
+import zipfile
+from typing import List, Optional
+from werkzeug.utils import secure_filename
 
 # 영수증생성기 모듈 import
 from receipt_generator_module import (
@@ -16,6 +19,8 @@ from receipt_generator_module import (
     create_receipts_zip, smart_filter_menu
 )
 from naver_scraper_module import get_naver_place_menu, format_menu_for_textarea
+from excel_parser import parse_excel_file
+from utils import remove_image_metadata, parse_text_to_files, allowed_file
 
 app = FastAPI()
 
@@ -2772,10 +2777,241 @@ async def generate_receipts_full(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"영수증 생성 오류: {str(e)}")
 
+# ==================== 고급 영수증 생성기 API ====================
+
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+ALLOWED_EXCEL_EXTENSIONS = {'xlsx', 'xls', 'csv'}
+
+@app.post("/api/generate_advanced_receipts")
+async def generate_advanced_receipts(
+    # 업체 정보
+    store_name: str = Form(...),
+    biz_num: str = Form(...),
+    owner_name: str = Form(...),
+    phone: str = Form(...),
+    address: str = Form(...),
+    
+    # 메뉴 및 생성 정보
+    menu_list: str = Form(...),
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    daily_count: int = Form(...),
+    start_hour: int = Form(11),
+    end_hour: int = Form(21),
+    apply_menu_filter: bool = Form(True),
+    
+    # 엑셀 파일 (선택)
+    use_excel: bool = Form(False),
+    excel_file: Optional[UploadFile] = File(None),
+    
+    # 사진 파일들 (선택)
+    photos: List[UploadFile] = File([]),
+    
+    # 텍스트 내용 (선택)
+    text_content: str = Form(""),
+):
+    """고급 영수증 생성 API - 사진, 엑셀, 리뷰 통합"""
+    try:
+        print("\n" + "="*50)
+        print("[DEBUG] 고급 영수증 생성 요청 시작")
+        print("="*50)
+        
+        # 업체 정보 구성
+        store_info = {
+            '상호명': store_name,
+            '사업자번호': biz_num,
+            '대표자명': owner_name,
+            '전화번호': phone,
+            '주소': address
+        }
+        
+        # 메뉴 파싱
+        menu_pool = parse_menu_input(menu_list, apply_filter=apply_menu_filter)
+        
+        # 날짜 정보
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        print(f"[DEBUG] 날짜 범위: {start_date_obj} ~ {end_date_obj}")
+        print(f"[DEBUG] 일일 생성 개수: {daily_count}")
+        
+        # 영수증 생성
+        receipt_results = generate_receipts_batch_web(
+            store_info, menu_pool, start_date_obj, end_date_obj, 
+            daily_count, start_hour, end_hour
+        )
+        
+        print(f"[DEBUG] 생성된 영수증 개수: {len(receipt_results)}")
+        
+        # 사진 처리
+        photo_images = []
+        if photos:
+            print(f"[DEBUG] 업로드된 사진 수: {len(photos)}")
+            
+            for idx, photo in enumerate(photos):
+                if photo and photo.filename and allowed_file(photo.filename, ALLOWED_IMAGE_EXTENSIONS):
+                    contents = await photo.read()
+                    clean_img = remove_image_metadata(io.BytesIO(contents))
+                    if clean_img:
+                        photo_images.append(clean_img)
+                        print(f"[DEBUG] 사진 {idx+1} 처리 완료")
+        
+        # 엑셀 데이터 처리
+        excel_data = {}
+        if use_excel and excel_file and excel_file.filename:
+            if allowed_file(excel_file.filename, ALLOWED_EXCEL_EXTENSIONS):
+                # 임시 파일로 저장
+                temp_path = f"temp_{secure_filename(excel_file.filename)}"
+                contents = await excel_file.read()
+                
+                with open(temp_path, 'wb') as f:
+                    f.write(contents)
+                
+                try:
+                    # 엑셀 파싱
+                    excel_items = parse_excel_file(temp_path)
+                    # 번호를 키로 하는 딕셔너리로 변환
+                    for item in excel_items:
+                        excel_data[item['번호']] = item
+                    print(f"[DEBUG] 엑셀 데이터 {len(excel_data)}개 로드")
+                except Exception as e:
+                    print(f"[ERROR] 엑셀 파싱 실패: {str(e)}")
+                finally:
+                    # 임시 파일 삭제
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+        
+        # 텍스트 처리
+        text_files_list = []
+        if not use_excel and text_content.strip():
+            text_files_dict = parse_text_to_files(text_content)
+            text_files_list = [(content, filename) for filename, content in text_files_dict.items()]
+            print(f"[DEBUG] 텍스트 파싱: {len(text_files_list)}개")
+        
+        # 전체 zip 파일 생성
+        master_zip = io.BytesIO()
+        
+        with zipfile.ZipFile(master_zip, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            receipt_number = 1
+            
+            for idx, (receipt_img, receipt_path) in enumerate(receipt_results):
+                # 경로 정보 추출
+                path_parts = receipt_path.split('/')
+                date_str = path_parts[1] if len(path_parts) > 1 else ""
+                
+                # 순번으로 파일명 생성
+                receipt_num_str = f"{receipt_number:03d}"
+                
+                # 엑셀 데이터 확인
+                excel_item = excel_data.get(receipt_number, {})
+                review_content = excel_item.get('리뷰내용', '')
+                has_review = bool(review_content and str(review_content).strip())
+                photo_num = excel_item.get('사진번호')
+                
+                # 사진번호를 정수로 변환
+                try:
+                    photo_num = int(photo_num) if photo_num else None
+                except (ValueError, TypeError):
+                    photo_num = None
+                has_photo = photo_num and photo_num <= len(photo_images) if photo_num else False
+                
+                print(f"[DEBUG] 영수증 {receipt_num_str}: 엑셀데이터={bool(excel_item)}, 리뷰내용='{review_content}', has_review={has_review}, 사진번호={photo_num}, 사진유무={has_photo}")
+                
+                # 패키지 생성 여부 결정
+                if has_review or has_photo:
+                    # 압축 파일 생성
+                    package_zip = io.BytesIO()
+                    
+                    with zipfile.ZipFile(package_zip, 'w', zipfile.ZIP_DEFLATED) as pkg_zip:
+                        # 영수증 추가
+                        receipt_img.seek(0)
+                        pkg_zip.writestr('영수증.jpg', receipt_img.read())
+                        
+                        # 사진 추가
+                        if has_photo:
+                            photo_idx = photo_num - 1  # 0부터 시작하는 인덱스
+                            photo_buffer = photo_images[photo_idx]
+                            photo_buffer.seek(0)
+                            pkg_zip.writestr('사진.jpg', photo_buffer.read())
+                        
+                        # 리뷰 추가
+                        if has_review:
+                            review_text = str(excel_item['리뷰내용']).strip()
+                            pkg_zip.writestr('리뷰.txt', review_text.encode('utf-8'))
+                            print(f"[DEBUG] 리뷰 추가됨: {review_text[:50]}...")
+                    
+                    package_zip.seek(0)
+                    
+                    # 압축파일 추가
+                    package_filename = f"{store_info['상호명']}_{date_str}_{receipt_num_str}.zip"
+                    zip_path = f"{store_info['상호명']}/{date_str}/{package_filename}"
+                    zip_file.writestr(zip_path, package_zip.read())
+                    
+                    content_list = []
+                    if has_review:
+                        content_list.append("리뷰")
+                    if has_photo:
+                        content_list.append(f"사진{photo_num}")
+                    print(f"[DEBUG] 패키지 생성: {zip_path} ({'+'.join(content_list)})")
+                    
+                else:
+                    # 영수증만 추가
+                    receipt_img.seek(0)
+                    # 파일명에 순번 추가
+                    filename = path_parts[-1].rsplit('.', 1)[0] + f"_{receipt_num_str}.jpg"
+                    new_path = f"{path_parts[0]}/{path_parts[1]}/{filename}"
+                    zip_file.writestr(new_path, receipt_img.read())
+                    print(f"[DEBUG] 영수증만: {new_path}")
+                
+                receipt_number += 1
+        
+        master_zip.seek(0)
+        
+        print(f"[DEBUG] 전체 압축 파일 생성 완료")
+        
+        # ZIP 파일 반환
+        filename = f"{store_info['상호명']}_영수증_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        
+        return StreamingResponse(
+            io.BytesIO(master_zip.read()),
+            media_type='application/zip',
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] 고급 영수증 생성 오류: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"영수증 생성 오류: {str(e)}")
+
+@app.get("/api/get_naver_menu")
+async def get_naver_menu_api(url: str):
+    """네이버 플레이스 메뉴 추출 API"""
+    try:
+        if not url or 'naver.com' not in url:
+            raise HTTPException(status_code=400, detail='유효한 네이버 플레이스 URL을 입력해주세요.')
+        
+        # 메뉴 추출
+        menu_items = get_naver_place_menu(url)
+        
+        # 7글자 필터 적용
+        menu_text = format_menu_for_textarea(menu_items, apply_filter=True)
+        
+        return {
+            'success': True,
+            'menu_text': menu_text,
+            'count': len(menu_text.split('\n')) if menu_text else 0
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     print("리뷰 관리 시스템 + 영수증 생성기")
     print("접속: http://localhost:8000")
     print("영수증 생성기: http://localhost:8000/admin/receipt-generator (관리자만)")
+    print("고급 영수증 생성기 API: POST /api/generate_advanced_receipts")
+    print("네이버 메뉴 추출 API: GET /api/get_naver_menu?url=...")
     print("단일 로그인: 사용자명만 입력하면 자동 등급 인식")
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
