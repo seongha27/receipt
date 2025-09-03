@@ -56,22 +56,38 @@ def ensure_font():
 def safe_text_draw(draw, position, text, font, fill='black', anchor=None):
     """안전한 텍스트 그리기 - 한글 인코딩 처리"""
     try:
+        # 텍스트를 명시적으로 UTF-8로 처리
         text_str = str(text)
-        if anchor:
-            draw.text(position, text_str, font=font, fill=fill, anchor=anchor)
+        
+        # 한글이 포함된 경우 폰트 검증
+        if any(ord(char) > 127 for char in text_str):
+            # 한글이 있으면 반드시 트루타입 폰트 사용
+            if ensure_font():
+                korean_font = ImageFont.truetype(font_path, size=getattr(font, 'size', 14))
+            else:
+                # 폰트 파일이 없으면 기본 폰트 사용하되 ASCII만 출력
+                text_str = ''.join(char if ord(char) < 128 else '?' for char in text_str)
+                korean_font = ImageFont.load_default()
         else:
-            draw.text(position, text_str, font=font, fill=fill)
+            korean_font = font
+        
+        if anchor:
+            draw.text(position, text_str, font=korean_font, fill=fill, anchor=anchor)
+        else:
+            draw.text(position, text_str, font=korean_font, fill=fill)
+            
     except Exception as e:
         print(f"텍스트 그리기 오류: {e}")
-        # 기본 폰트로 재시도
+        # ASCII만 추출해서 그리기
         try:
+            ascii_text = ''.join(char if ord(char) < 128 else '?' for char in str(text))
             default_font = ImageFont.load_default()
             if anchor:
-                draw.text(position, str(text), font=default_font, fill=fill, anchor=anchor)
+                draw.text(position, ascii_text, font=default_font, fill=fill, anchor=anchor)
             else:
-                draw.text(position, str(text), font=default_font, fill=fill)
+                draw.text(position, ascii_text, font=default_font, fill=fill)
         except Exception as e2:
-            print(f"기본 폰트로도 실패: {e2}")
+            print(f"ASCII 변환도 실패: {e2}")
 
 def smart_filter_menu(menu_name, max_length=7):
     """메뉴명을 7글자 이하로 필터링"""
