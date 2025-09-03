@@ -85,6 +85,36 @@ def parse_menu_input(menu_text, apply_filter=False):
     
     return menu_pool
 
+def generate_spaced_times(start_hour, end_hour, count, min_gap_minutes=50):
+    """최소 간격을 보장하는 시간들을 생성"""
+    total_minutes = (end_hour - start_hour) * 60
+    min_required_minutes = (count - 1) * min_gap_minutes
+    
+    if min_required_minutes >= total_minutes:
+        actual_gap = max(1, total_minutes // count)
+    else:
+        actual_gap = min_gap_minutes
+    
+    times = []
+    available_minutes = total_minutes - ((count - 1) * actual_gap)
+    
+    for i in range(count):
+        if i == 0:
+            base_minutes = random.randint(0, available_minutes // count)
+        else:
+            prev_time = times[i-1]
+            prev_total_minutes = prev_time[0] * 60 + prev_time[1]
+            extra_minutes = random.randint(0, min(30, (available_minutes // (count - i)) if count > i else 30))
+            base_minutes = prev_total_minutes + actual_gap + extra_minutes - start_hour * 60
+        
+        base_minutes = min(base_minutes, total_minutes - 1)
+        hour = start_hour + (base_minutes // 60)
+        minute = base_minutes % 60
+        second = random.randint(0, 59)
+        times.append((hour, minute, second))
+    
+    return times
+
 def draw_centered(draw, text, font_obj, y_pos, width):
     bbox = draw.textbbox((0, 0), text, font=font_obj)
     w = bbox[2] - bbox[0]
@@ -159,39 +189,43 @@ def draw_receipt(store_info, date, hour, minute, second, receipt_id, menu_pool):
     ]:
         draw.text((30, y), line, font=font, fill="black"); y += 55
 
+    # EXIF 데이터 추가 (원본과 동일)
+    device = random.choice(DEVICE_LIST)
+    exif_dict = piexif.load(image.info.get("exif", piexif.dump({})))
+    exif_dict["0th"][piexif.ImageIFD.Make] = device[0].encode()
+    exif_dict["0th"][piexif.ImageIFD.Model] = device[1].encode()
+    exif_bytes = piexif.dump(exif_dict)
+    image.info["exif"] = exif_bytes
+
     return image
 
 def generate_receipts_batch_web(store_info, menu_pool, start_date, end_date, daily_count, start_hour=11, end_hour=21):
-    """웹용 영수증 배치 생성 - 원본 방식"""
-    receipts = []
+    """웹용 영수증 배치 생성 - 원본과 완전 동일"""
+    results = []
+    receipt_id = random.randint(100000, 999999)
+    store_name = store_info['상호명']
     
-    current_date = start_date
-    receipt_number = 1
-    
-    while current_date <= end_date:
+    for n in range((end_date - start_date).days + 1):
+        day = start_date + timedelta(days=n)
+        date_str = day.strftime("%Y-%m-%d")
+        
+        # 해당 날짜의 모든 영수증에 대한 시간을 미리 생성 (최소 50분 간격)
+        daily_times = generate_spaced_times(start_hour, end_hour, daily_count, min_gap_minutes=50)
+        
         for i in range(daily_count):
-            hour = random.randint(start_hour, end_hour)
-            minute = random.randint(0, 59)
-            second = random.randint(0, 59)
-            
-            receipt_img = draw_receipt(
-                store_info, 
-                current_date.strftime('%Y-%m-%d'),
+            hour, minute, second = daily_times[i]
+            img = draw_receipt(
+                store_info, date_str, 
                 f"{hour:02d}", f"{minute:02d}", f"{second:02d}",
-                receipt_number,
-                menu_pool
+                receipt_id + n * daily_count + i, menu_pool
             )
             
-            img_byte_arr = io.BytesIO()
-            receipt_img.save(img_byte_arr, format='PNG')
-            img_byte_arr.seek(0)
+            img_io = io.BytesIO()
+            img.save(img_io, format="JPEG", exif=img.info.get("exif"))
+            img_io.seek(0)
             
-            date_str = current_date.strftime('%Y-%m-%d')
-            receipt_path = f"{store_info['상호명']}/{date_str}/receipt_{receipt_number:03d}.jpg"
-            
-            receipts.append((img_byte_arr, receipt_path))
-            receipt_number += 1
-            
-        current_date += timedelta(days=1)
+            file_name = f"receipt_{n * daily_count + i + 1}.jpg"
+            folder_path = f"{store_name}/{date_str}"
+            results.append((img_io, f"{folder_path}/{file_name}"))
     
-    return receipts
+    return results
