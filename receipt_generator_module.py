@@ -165,39 +165,50 @@ def remove_image_metadata(image):
     except:
         return image
 
-def generate_receipts_batch_web(store_name, menu_pool, count=10, date_range_days=30):
-    """웹용 영수증 배치 생성"""
+def generate_receipts_batch_web(store_info, menu_pool, start_date, end_date, daily_count, start_hour=11, end_hour=21):
+    """웹용 영수증 배치 생성 - 고급 버전"""
     receipts = []
     
-    for i in range(count):
-        # 랜덤 날짜 생성 (과거 날짜)
-        days_ago = random.randint(1, date_range_days)
-        receipt_date = datetime.now() - timedelta(days=days_ago)
-        
-        # 랜덤 메뉴 선택 (1-5개)
-        selected_menus = random.sample(menu_pool, min(random.randint(1, 5), len(menu_pool)))
-        
-        # 총액 계산
-        total_amount = sum(price for _, price in selected_menus)
-        
-        # 영수증 이미지 생성
-        receipt_img = create_receipt_image(store_name, selected_menus, total_amount, receipt_date)
-        
-        # 메타데이터 제거
-        receipt_img = remove_image_metadata(receipt_img)
-        
-        # 이미지를 바이트로 변환
-        img_byte_arr = io.BytesIO()
-        receipt_img.save(img_byte_arr, format='PNG')
-        img_byte_arr.seek(0)
-        
-        receipts.append({
-            'filename': f'receipt_{i+1:03d}_{receipt_date.strftime("%Y%m%d_%H%M%S")}.png',
-            'image_data': img_byte_arr.getvalue(),
-            'date': receipt_date,
-            'total': total_amount,
-            'menus': selected_menus
-        })
+    current_date = start_date
+    receipt_number = 1
+    
+    while current_date <= end_date:
+        for i in range(daily_count):
+            # 랜덤 시간 생성 (영업 시간 내)
+            hour = random.randint(start_hour, end_hour)
+            minute = random.randint(0, 59)
+            receipt_datetime = current_date.replace(hour=hour, minute=minute)
+            
+            # 랜덤 메뉴 선택 (1-5개)
+            selected_menus = random.sample(menu_pool, min(random.randint(1, 5), len(menu_pool)))
+            
+            # 총액 계산
+            total_amount = sum(price for _, price in selected_menus)
+            
+            # 영수증 이미지 생성 (업체 정보 포함)
+            receipt_img = create_receipt_image_full(
+                store_info['상호명'], store_info['사업자번호'], store_info['대표자명'], 
+                store_info['전화번호'], store_info['주소'], 
+                selected_menus, total_amount, receipt_datetime
+            )
+            
+            # 메타데이터 제거
+            receipt_img = remove_image_metadata(receipt_img)
+            
+            # 이미지를 바이트로 변환
+            img_byte_arr = io.BytesIO()
+            receipt_img.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            
+            # 파일 경로 생성
+            date_str = current_date.strftime('%Y-%m-%d')
+            receipt_path = f"{store_info['상호명']}/{date_str}/receipt_{receipt_number:03d}.jpg"
+            
+            receipts.append((img_byte_arr, receipt_path))
+            receipt_number += 1
+            
+        # 다음 날로 이동
+        current_date += timedelta(days=1)
     
     return receipts
 
