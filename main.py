@@ -327,7 +327,7 @@ def admin_page():
     <script>
         function showTab(tab) {{
             // 모든 탭 숨기기
-            const tabs = ['companies', 'stores', 'reviewers', 'assignments', 'reviews', 'upload'];
+            const tabs = ['companies', 'stores', 'reviewers', 'assignments', 'reviews', 'upload', 'receipt'];
             tabs.forEach(t => {{
                 const tabElement = document.getElementById(t + 'Tab');
                 const btnElement = document.getElementById(t + 'Btn');
@@ -357,11 +357,6 @@ def admin_page():
             newUrl.searchParams.set('tab', tab);
             window.history.pushState({{}}, '', newUrl);
         }}
-        
-        function openReceiptGenerator() {{
-            // 새 탭에서 영수증생성기 열기
-            window.open('/admin/receipt-generator', '_blank');
-        }}
     </script>
 </head>
 <body style="font-family: Arial; background: #f5f7fa; margin: 0; padding: 20px;">
@@ -381,7 +376,7 @@ def admin_page():
                 <button onclick="showTabWithUrl('assignments')" id="assignmentsBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🔗 배정</button>
                 <button onclick="showTabWithUrl('reviews')" id="reviewsBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📝 리뷰</button>
                 <button onclick="showTabWithUrl('upload')" id="uploadBtn" style="padding: 12px 24px; margin-right: 8px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">📊 엑셀업로드</button>
-                <button onclick="openReceiptGenerator()" id="receiptBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🧾 영수증생성</button>
+                <button onclick="showTabWithUrl('receipt')" id="receiptBtn" style="padding: 12px 24px; border: none; border-radius: 8px 8px 0 0; background: #f8f9fa; color: #333; cursor: pointer; font-weight: 600;">🧾 영수증생성</button>
             </div>
 
             <!-- 고객사 관리 -->
@@ -571,8 +566,119 @@ def admin_page():
                     </div>
                 </div>
             </div>
+            
+            <!-- 영수증 생성기 탭 -->
+            <div id="receiptTab" style="display: none;">
+                <h3 style="margin-bottom: 20px; color: #333;">🧾 영수증 생성기</h3>
+                <div style="background: #f8f9fa; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                    <form id="receiptForm" style="display: grid; gap: 20px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">네이버 플레이스 URL (선택사항)</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="url" id="placeUrl" placeholder="https://place.naver.com/restaurant/1234567890" style="flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
+                                <button type="button" onclick="fetchMenuData()" style="padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; white-space: nowrap;">메뉴 추출</button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">상호명 *</label>
+                            <input type="text" id="storeName" placeholder="예: 맛있는 식당" required style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">메뉴 정보 * (메뉴명 가격원 형식으로 입력)</label>
+                            <textarea id="menuText" required style="width: 100%; min-height: 120px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-family: monospace; font-size: 14px;" placeholder="김치찌개 8000원&#10;된장찌개 7000원&#10;불고기정식 12000원"></textarea>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">생성할 영수증 개수</label>
+                                <input type="number" id="receiptCount" value="10" min="1" max="50" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">날짜 범위 (최근 며칠)</label>
+                                <input type="number" id="dateRange" value="30" min="1" max="365" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
+                            </div>
+                        </div>
+                        
+                        <button type="submit" style="padding: 15px 30px; background: linear-gradient(45deg, #667eea, #764ba2); color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: 600; transition: transform 0.2s;">🎯 영수증 생성하기</button>
+                    </form>
+                    
+                    <div id="receiptResult" style="display: none; margin-top: 25px; padding: 20px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px;">
+                        <h4 style="color: #155724; margin-bottom: 10px;">✅ 영수증 생성 완료!</h4>
+                        <p id="receiptResultText" style="color: #155724; margin: 0;"></p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+    
+    <script>
+        async function fetchMenuData() {{
+            const placeUrl = document.getElementById('placeUrl').value;
+            if (!placeUrl) {{
+                alert('네이버 플레이스 URL을 입력해주세요.');
+                return;
+            }}
+
+            try {{
+                const response = await fetch('/admin/api/fetch-menu', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ place_url: placeUrl }})
+                }});
+
+                const data = await response.json();
+                
+                if (data.success) {{
+                    document.getElementById('storeName').value = data.store_name;
+                    document.getElementById('menuText').value = data.menu_text;
+                    alert(`메뉴 ${{data.total_count}}개를 성공적으로 추출했습니다!`);
+                }} else {{
+                    alert(`오류: ${{data.error}}`);
+                }}
+            }} catch (error) {{
+                alert(`네트워크 오류: ${{error.message}}`);
+            }}
+        }}
+
+        document.getElementById('receiptForm').onsubmit = async function(e) {{
+            e.preventDefault();
+            
+            const formData = {{
+                store_name: document.getElementById('storeName').value,
+                menu_text: document.getElementById('menuText').value,
+                receipt_count: parseInt(document.getElementById('receiptCount').value),
+                date_range: parseInt(document.getElementById('dateRange').value)
+            }};
+
+            try {{
+                const response = await fetch('/admin/api/generate-receipts', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify(formData)
+                }});
+
+                if (response.ok) {{
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `receipts_${{formData.store_name}}_${{new Date().getTime()}}.zip`;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+
+                    document.getElementById('receiptResultText').innerHTML = `<strong>${{formData.receipt_count}}개</strong>의 영수증이 생성되어 다운로드되었습니다.`;
+                    document.getElementById('receiptResult').style.display = 'block';
+                }} else {{
+                    const error = await response.json();
+                    alert(`오류: ${{error.detail}}`);
+                }}
+            }} catch (error) {{
+                alert(`오류: ${{error.message}}`);
+            }}
+        }};
+    </script>
 </body>
 </html>""")
 
