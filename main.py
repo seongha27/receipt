@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Form, BackgroundTasks
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import FastAPI, Form, BackgroundTasks, UploadFile, File, HTTPException, Depends, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, FileResponse
 import uvicorn
 import sqlite3
 import hashlib
@@ -8,6 +8,14 @@ import re
 import pandas as pd
 import io
 from datetime import datetime, timedelta
+import tempfile
+
+# 영수증생성기 모듈 import
+from receipt_generator_module import (
+    parse_menu_input, generate_receipts_batch_web, 
+    create_receipts_zip, smart_filter_menu
+)
+from naver_scraper_module import get_naver_place_menu, format_menu_for_textarea
 
 app = FastAPI()
 
@@ -2098,9 +2106,241 @@ async def retry_review(review_id: int, background_tasks: BackgroundTasks):
 </body>
 </html>""")
 
+# 관리자 권한 체크 함수
+def get_admin_user(request: Request):
+    """관리자 권한 확인"""
+    # 세션이 없는 경우 쿠키에서 확인
+    username = request.cookies.get('username')
+    if username == 'admin':
+        return {"username": "admin", "role": "admin"}
+    raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+
+# ==================== 영수증 생성기 라우트 ====================
+
+@app.get("/admin/receipt-generator")
+async def receipt_generator_page(request: Request, admin_user=Depends(get_admin_user)):
+    """관리자 전용 영수증생성기 페이지"""
+    return HTMLResponse(content="""
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>영수증 생성기 - 관리자 전용</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+            .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+            .card { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); padding: 30px; margin-bottom: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .header h1 { color: #333; font-size: 2.5em; margin-bottom: 10px; }
+            .form-group { margin-bottom: 20px; }
+            .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+            .form-control { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
+            .form-control:focus { border-color: #667eea; outline: none; }
+            textarea.form-control { min-height: 120px; font-family: monospace; }
+            .btn { background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.3s; }
+            .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+            .btn-secondary { background: linear-gradient(45deg, #28a745, #20c997); margin-right: 10px; }
+            .result { margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745; }
+            .nav-link { color: white; text-decoration: none; padding: 10px 20px; background: rgba(255,255,255,0.2); border-radius: 8px; display: inline-block; margin-bottom: 20px; }
+            .nav-link:hover { background: rgba(255,255,255,0.3); }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <a href="/" class="nav-link">← 메인으로 돌아가기</a>
+            
+            <div class="card">
+                <div class="header">
+                    <h1>🧾 영수증 생성기</h1>
+                    <p>관리자 전용 - 네이버 플레이스 메뉴 기반 영수증 생성</p>
+                </div>
+
+                <form id="receiptForm">
+                    <div class="form-group">
+                        <label>네이버 플레이스 URL (선택사항)</label>
+                        <input type="url" class="form-control" id="placeUrl" placeholder="https://place.naver.com/restaurant/1234567890">
+                        <button type="button" class="btn btn-secondary" onclick="fetchMenu()" style="margin-top: 10px;">메뉴 자동 추출</button>
+                    </div>
+
+                    <div class="form-group">
+                        <label>상호명 *</label>
+                        <input type="text" class="form-control" id="storeName" placeholder="예: 맛있는 식당" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>메뉴 정보 * (메뉴명 가격 형식으로 입력)</label>
+                        <textarea class="form-control" id="menuText" placeholder="김치찌개 8000원
+된장찌개 7000원
+불고기정식 12000원" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>생성할 영수증 개수</label>
+                        <input type="number" class="form-control" id="receiptCount" value="10" min="1" max="50">
+                    </div>
+
+                    <div class="form-group">
+                        <label>날짜 범위 (최근 며칠)</label>
+                        <input type="number" class="form-control" id="dateRange" value="30" min="1" max="365">
+                    </div>
+
+                    <button type="submit" class="btn">🎯 영수증 생성하기</button>
+                </form>
+
+                <div id="result" style="display: none;"></div>
+            </div>
+        </div>
+
+        <script>
+            async function fetchMenu() {
+                const placeUrl = document.getElementById('placeUrl').value;
+                if (!placeUrl) {
+                    alert('네이버 플레이스 URL을 입력해주세요.');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/admin/api/fetch-menu', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ place_url: placeUrl })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        document.getElementById('storeName').value = data.store_name;
+                        document.getElementById('menuText').value = data.menu_text;
+                        alert(`메뉴 ${data.total_count}개를 성공적으로 추출했습니다!`);
+                    } else {
+                        alert(`오류: ${data.error}`);
+                    }
+                } catch (error) {
+                    alert(`네트워크 오류: ${error.message}`);
+                }
+            }
+
+            document.getElementById('receiptForm').onsubmit = async function(e) {
+                e.preventDefault();
+                
+                const formData = {
+                    store_name: document.getElementById('storeName').value,
+                    menu_text: document.getElementById('menuText').value,
+                    receipt_count: parseInt(document.getElementById('receiptCount').value),
+                    date_range: parseInt(document.getElementById('dateRange').value)
+                };
+
+                try {
+                    const response = await fetch('/admin/api/generate-receipts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `receipts_${formData.store_name}_${new Date().getTime()}.zip`;
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+
+                        document.getElementById('result').innerHTML = `
+                            <h3>✅ 영수증 생성 완료!</h3>
+                            <p><strong>${formData.receipt_count}개</strong>의 영수증이 생성되어 다운로드되었습니다.</p>
+                        `;
+                        document.getElementById('result').style.display = 'block';
+                    } else {
+                        const error = await response.json();
+                        alert(`오류: ${error.detail}`);
+                    }
+                } catch (error) {
+                    alert(`오류: ${error.message}`);
+                }
+            };
+        </script>
+    </body>
+    </html>
+    """)
+
+@app.post("/admin/api/fetch-menu")
+async def fetch_menu(request: Request, admin_user=Depends(get_admin_user)):
+    """네이버 플레이스에서 메뉴 추출 API"""
+    data = await request.json()
+    place_url = data.get('place_url')
+    
+    if not place_url:
+        raise HTTPException(status_code=400, detail="네이버 플레이스 URL이 필요합니다")
+    
+    try:
+        result = get_naver_place_menu(place_url)
+        
+        if result.get('success'):
+            menu_text = format_menu_for_textarea(result)
+            return {
+                "success": True,
+                "store_name": result.get('store_name', ''),
+                "menu_text": menu_text,
+                "total_count": result.get('total_count', 0)
+            }
+        else:
+            return {"success": False, "error": result.get('error', '알 수 없는 오류')}
+            
+    except Exception as e:
+        return {"success": False, "error": f"서버 오류: {str(e)}"}
+
+@app.post("/admin/api/generate-receipts")
+async def generate_receipts(request: Request, admin_user=Depends(get_admin_user)):
+    """영수증 생성 및 ZIP 다운로드 API"""
+    data = await request.json()
+    
+    store_name = data.get('store_name', '').strip()
+    menu_text = data.get('menu_text', '').strip()
+    receipt_count = data.get('receipt_count', 10)
+    date_range = data.get('date_range', 30)
+    
+    if not store_name or not menu_text:
+        raise HTTPException(status_code=400, detail="상호명과 메뉴 정보는 필수입니다")
+    
+    try:
+        # 메뉴 파싱
+        menu_pool = parse_menu_input(menu_text, apply_filter=True)
+        
+        if not menu_pool:
+            raise HTTPException(status_code=400, detail="유효한 메뉴 정보를 찾을 수 없습니다")
+        
+        # 영수증 생성
+        receipts = generate_receipts_batch_web(
+            store_name=store_name,
+            menu_pool=menu_pool,
+            count=receipt_count,
+            date_range_days=date_range
+        )
+        
+        # ZIP 파일 생성
+        zip_buffer = create_receipts_zip(receipts)
+        
+        # 임시 파일로 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+            tmp_file.write(zip_buffer.getvalue())
+            tmp_file_path = tmp_file.name
+        
+        return FileResponse(
+            path=tmp_file_path,
+            filename=f"receipts_{store_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            media_type='application/zip'
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"영수증 생성 오류: {str(e)}")
+
 if __name__ == "__main__":
-    print("리뷰 관리 시스템")
+    print("리뷰 관리 시스템 + 영수증 생성기")
     print("접속: http://localhost:8000")
+    print("영수증 생성기: http://localhost:8000/admin/receipt-generator (관리자만)")
     print("단일 로그인: 사용자명만 입력하면 자동 등급 인식")
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
