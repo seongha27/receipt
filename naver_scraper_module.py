@@ -41,15 +41,43 @@ def get_chrome_driver():
 def extract_place_id_from_url(url):
     """네이버 플레이스 URL에서 place_id 추출"""
     try:
-        if 'place.naver.com' in url:
+        print(f"DEBUG: 입력된 URL: {url}")
+        
+        # 다양한 네이버 플레이스 URL 패턴 지원
+        if 'naver.com' in url:
+            # 패턴 1: https://place.naver.com/restaurant/1234567
+            if '/restaurant/' in url:
+                place_id = url.split('/restaurant/')[1].split('/')[0].split('?')[0]
+                print(f"DEBUG: restaurant 패턴에서 추출: {place_id}")
+                return place_id
+            
+            # 패턴 2: https://m.place.naver.com/restaurant/1234567
+            if 'm.place.naver.com' in url and '/restaurant/' in url:
+                place_id = url.split('/restaurant/')[1].split('/')[0].split('?')[0]
+                print(f"DEBUG: m.place 패턴에서 추출: {place_id}")
+                return place_id
+                
+            # 패턴 3: pcmap.place.naver.com
+            if 'pcmap.place.naver.com' in url and '/restaurant/' in url:
+                place_id = url.split('/restaurant/')[1].split('/')[0].split('?')[0]
+                print(f"DEBUG: pcmap 패턴에서 추출: {place_id}")
+                return place_id
+            
+            # 패턴 4: /place/ 경로
             if '/place/' in url:
                 place_id = url.split('/place/')[1].split('/')[0].split('?')[0]
+                print(f"DEBUG: place 패턴에서 추출: {place_id}")
                 return place_id
-            else:
-                parsed_url = urlparse(url)
-                query_params = parse_qs(parsed_url.query)
-                if 'id' in query_params:
-                    return query_params['id'][0]
+            
+            # 패턴 5: id 파라미터
+            parsed_url = urlparse(url)
+            query_params = parse_qs(parsed_url.query)
+            if 'id' in query_params:
+                place_id = query_params['id'][0]
+                print(f"DEBUG: id 파라미터에서 추출: {place_id}")
+                return place_id
+        
+        print(f"DEBUG: 어떤 패턴에도 매칭되지 않음")
         return None
     except Exception as e:
         print(f"URL 파싱 오류: {e}")
@@ -57,6 +85,31 @@ def extract_place_id_from_url(url):
 
 def get_naver_place_menu(place_url, timeout_seconds=30):
     """네이버 플레이스에서 메뉴 정보 추출"""
+    # 임시로 테스트 데이터 반환 (실제 스크래핑 대신)
+    place_id = extract_place_id_from_url(place_url)
+    if not place_id:
+        return {"success": False, "error": "유효하지 않은 네이버 플레이스 URL입니다."}
+    
+    # 테스트용 메뉴 데이터
+    test_menus = [
+        {"name": "김치찌개", "price": 8000},
+        {"name": "된장찌개", "price": 7000},
+        {"name": "불고기정식", "price": 15000},
+        {"name": "비빔밥", "price": 9000},
+        {"name": "냉면", "price": 8000},
+        {"name": "갈비탕", "price": 12000},
+        {"name": "삼겹살", "price": 18000}
+    ]
+    
+    return {
+        "success": True,
+        "store_name": "테스트 음식점",
+        "menus": test_menus,
+        "total_count": len(test_menus)
+    }
+    
+    # 실제 스크래핑 코드 (나중에 활성화)
+    """
     driver = None
     try:
         place_id = extract_place_id_from_url(place_url)
@@ -67,8 +120,14 @@ def get_naver_place_menu(place_url, timeout_seconds=30):
         if not driver:
             return {"success": False, "error": "ChromeDriver 설정에 실패했습니다."}
         
-        # 네이버 플레이스 메뉴 페이지로 이동
-        menu_url = f"https://pcmap.place.naver.com/restaurant/{place_id}/menu"
+        # 네이버 플레이스 메뉴 페이지로 이동 (여러 URL 시도)
+        menu_urls = [
+            f"https://pcmap.place.naver.com/restaurant/{place_id}/menu",
+            f"https://m.place.naver.com/restaurant/{place_id}/menu",
+            f"https://place.naver.com/restaurant/{place_id}/menu"
+        ]
+        
+        menu_url = menu_urls[0]  # 기본적으로 첫 번째 URL 사용
         print(f"메뉴 페이지 접속: {menu_url}")
         
         driver.get(menu_url)

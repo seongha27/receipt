@@ -618,7 +618,11 @@ def admin_page():
                         
                         <div>
                             <label style="display: block; margin-bottom: 8px; font-weight: 600;">메뉴 목록 * <span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 3px; font-size: 12px;">수동 입력/수정 가능</span></label>
-                            <textarea id="menuText" required style="width: 100%; height: 120px; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace;" placeholder="김치찌개 8000&#10;된장찌개 7000&#10;불고기 15000"></textarea>
+                            <textarea id="menuText" required style="width: 100%; height: 120px; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace;" placeholder="김치찌개 8000원&#10;된장찌개 7000원&#10;불고기정식 15000원">김치찌개 8000원
+된장찌개 7000원
+불고기정식 15000원
+비빔밥 9000원
+냉면 8000원</textarea>
                             <div style="margin-top: 8px; color: #6c757d;">
                                 <i class="fas fa-info-circle"></i> <span id="menuCount">0</span>개 메뉴
                             </div>
