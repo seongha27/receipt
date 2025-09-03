@@ -570,50 +570,224 @@ def admin_page():
             <!-- 영수증 생성기 탭 -->
             <div id="receiptTab" style="display: none;">
                 <h3 style="margin-bottom: 20px; color: #333;">🧾 영수증 생성기</h3>
-                <div style="background: #f8f9fa; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-                    <form id="receiptForm" style="display: grid; gap: 20px;">
-                        <div>
-                            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">네이버 플레이스 URL (선택사항)</label>
-                            <div style="display: flex; gap: 10px;">
-                                <input type="url" id="placeUrl" placeholder="https://place.naver.com/restaurant/1234567890" style="flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
-                                <button type="button" onclick="fetchMenuData()" style="padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; white-space: nowrap;">메뉴 추출</button>
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">상호명 *</label>
-                            <input type="text" id="storeName" placeholder="예: 맛있는 식당" required style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
-                        </div>
-                        
-                        <div>
-                            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">메뉴 정보 * (메뉴명 가격원 형식으로 입력)</label>
-                            <textarea id="menuText" required style="width: 100%; min-height: 120px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-family: monospace; font-size: 14px;" placeholder="김치찌개 8000원&#10;된장찌개 7000원&#10;불고기정식 12000원"></textarea>
-                        </div>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">생성할 영수증 개수</label>
-                                <input type="number" id="receiptCount" value="10" min="1" max="50" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
-                            </div>
-                            <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">날짜 범위 (최근 며칠)</label>
-                                <input type="number" id="dateRange" value="30" min="1" max="365" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
-                            </div>
-                        </div>
-                        
-                        <button type="submit" style="padding: 15px 30px; background: linear-gradient(45deg, #667eea, #764ba2); color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: 600; transition: transform 0.2s;">🎯 영수증 생성하기</button>
-                    </form>
-                    
-                    <div id="receiptResult" style="display: none; margin-top: 25px; padding: 20px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px;">
-                        <h4 style="color: #155724; margin-bottom: 10px;">✅ 영수증 생성 완료!</h4>
-                        <p id="receiptResultText" style="color: #155724; margin: 0;"></p>
+                
+                <!-- Step 1: 업체 정보 -->
+                <div style="background: white; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="background: #007bff; color: white; padding: 15px; border-radius: 10px 10px 0 0;">
+                        <h5 style="margin: 0;"><span style="background: #fff; color: #007bff; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; font-weight: bold;">1</span>업체 정보</h5>
                     </div>
+                    <div style="padding: 20px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">상호명 *</label>
+                                <input type="text" id="storeName" required style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">사업자번호 *</label>
+                                <input type="text" id="bizNum" pattern="[0-9]{3}-[0-9]{2}-[0-9]{5}" placeholder="123-45-67890" required style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">대표자명 *</label>
+                                <input type="text" id="ownerName" required style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">전화번호 *</label>
+                                <input type="text" id="phone" required style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px;">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">주소 *</label>
+                            <textarea id="address" required style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; height: 80px;"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: 메뉴 설정 -->
+                <div style="background: white; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="background: #28a745; color: white; padding: 15px; border-radius: 10px 10px 0 0;">
+                        <h5 style="margin: 0;"><span style="background: #fff; color: #28a745; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; font-weight: bold;">2</span>메뉴 설정</h5>
+                    </div>
+                    <div style="padding: 20px;">
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">네이버 플레이스 URL (자동 추출)</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="url" id="placeUrl" placeholder="https://place.naver.com/restaurant/1234567890" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                <button type="button" onclick="fetchMenuData()" style="padding: 10px 20px; background: #17a2b8; color: white; border: none; border-radius: 5px; font-weight: 600;">메뉴 가져오기</button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600;">메뉴 목록 * <span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 3px; font-size: 12px;">수동 입력/수정 가능</span></label>
+                            <textarea id="menuText" required style="width: 100%; height: 120px; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace;" placeholder="김치찌개 8000&#10;된장찌개 7000&#10;불고기 15000"></textarea>
+                            <div style="margin-top: 8px; color: #6c757d;">
+                                <i class="fas fa-info-circle"></i> <span id="menuCount">0</span>개 메뉴
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <input type="checkbox" id="applyMenuFilter" checked>
+                                <label for="applyMenuFilter" style="margin-left: 8px;">7글자 필터 적용 (공백 제거 후 7글자 이하만 사용)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: 날짜 및 시간 설정 -->
+                <div style="background: white; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="background: #fd7e14; color: white; padding: 15px; border-radius: 10px 10px 0 0;">
+                        <h5 style="margin: 0;"><span style="background: #fff; color: #fd7e14; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; font-weight: bold;">3</span>날짜 및 시간 설정</h5>
+                    </div>
+                    <div style="padding: 20px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">시작 날짜 *</label>
+                                <input type="date" id="startDate" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">종료 날짜 *</label>
+                                <input type="date" id="endDate" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">일일 개수 *</label>
+                                <input type="number" id="dailyCount" min="1" max="100" value="5" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">시작 시간</label>
+                                <select id="startHour" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                    <option value="9">09시</option>
+                                    <option value="10">10시</option>
+                                    <option value="11" selected>11시</option>
+                                    <option value="12">12시</option>
+                                    <option value="13">13시</option>
+                                    <option value="14">14시</option>
+                                    <option value="15">15시</option>
+                                    <option value="16">16시</option>
+                                    <option value="17">17시</option>
+                                    <option value="18">18시</option>
+                                    <option value="19">19시</option>
+                                    <option value="20">20시</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600;">종료 시간</label>
+                                <select id="endHour" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                    <option value="12">12시</option>
+                                    <option value="13">13시</option>
+                                    <option value="14">14시</option>
+                                    <option value="15">15시</option>
+                                    <option value="16">16시</option>
+                                    <option value="17">17시</option>
+                                    <option value="18">18시</option>
+                                    <option value="19">19시</option>
+                                    <option value="20">20시</option>
+                                    <option value="21" selected>21시</option>
+                                    <option value="22">22시</option>
+                                    <option value="23">23시</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                            <strong>생성 예정:</strong> <span id="previewText">날짜를 선택하면 총 생성 개수가 표시됩니다.</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 4: 추가 파일 업로드 -->
+                <div style="background: white; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="background: #6f42c1; color: white; padding: 15px; border-radius: 10px 10px 0 0;">
+                        <h5 style="margin: 0;"><span style="background: #fff; color: #6f42c1; width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; font-weight: bold;">4</span>추가 파일 업로드 (선택)</h5>
+                    </div>
+                    <div style="padding: 20px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div>
+                                <h6><i class="fas fa-file-excel" style="color: #28a745;"></i> 엑셀 데이터</h6>
+                                <div style="border: 2px dashed #dee2e6; border-radius: 8px; padding: 20px; text-align: center; background: #f8f9fa; cursor: pointer;" id="excelDropArea">
+                                    <i class="fas fa-file-upload" style="font-size: 2rem; margin-bottom: 15px; color: #6c757d;"></i>
+                                    <p>엑셀 파일을 드래그하거나 클릭하여 선택</p>
+                                    <small style="color: #6c757d;">지원: .xlsx, .xls, .csv</small>
+                                    <input type="file" id="excelInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                                </div>
+                                <div id="excelList"></div>
+                            </div>
+                            <div>
+                                <h6><i class="fas fa-images" style="color: #007bff;"></i> 사진 (메타데이터 자동 제거)</h6>
+                                <div style="border: 2px dashed #dee2e6; border-radius: 8px; padding: 20px; text-align: center; background: #f8f9fa; cursor: pointer;" id="photoDropArea">
+                                    <i class="fas fa-images" style="font-size: 2rem; margin-bottom: 15px; color: #6c757d;"></i>
+                                    <p>사진들을 드래그하거나 클릭하여 선택</p>
+                                    <small style="color: #6c757d;">순서대로 번호 부여 (1번부터)</small>
+                                    <input type="file" id="photoInput" multiple accept="image/*" style="display: none;">
+                                </div>
+                                <div id="photoList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 영수증 생성 버튼 -->
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <button type="button" onclick="generateReceipts()" style="padding: 20px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-size: 18px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
+                        <i class="fas fa-magic"></i> 영수증 생성하기
+                    </button>
+                </div>
+                
+                <div id="receiptResult" style="display: none; margin-top: 25px; padding: 20px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px;">
+                    <h4 style="color: #155724; margin-bottom: 10px;">✅ 영수증 생성 완료!</h4>
+                    <p id="receiptResultText" style="color: #155724; margin: 0;"></p>
                 </div>
             </div>
         </div>
     </div>
     
     <script>
+        // 초기 날짜 설정
+        document.addEventListener('DOMContentLoaded', function() {{
+            const today = new Date();
+            const lastMonth = new Date(today);
+            lastMonth.setMonth(today.getMonth() - 1);
+            
+            document.getElementById('startDate').value = lastMonth.toISOString().split('T')[0];
+            document.getElementById('endDate').value = today.toISOString().split('T')[0];
+            
+            updatePreview();
+        }});
+
+        // 사업자번호 자동 포맷팅
+        document.getElementById('bizNum').addEventListener('input', function(e) {{
+            let value = e.target.value.replace(/[^0-9]/g, '');
+            if (value.length >= 3) {{
+                value = value.substring(0,3) + '-' + value.substring(3);
+            }}
+            if (value.length >= 6) {{
+                value = value.substring(0,6) + '-' + value.substring(6);
+            }}
+            if (value.length > 12) {{
+                value = value.substring(0,12);
+            }}
+            e.target.value = value;
+        }});
+
+        // 미리보기 업데이트
+        function updatePreview() {{
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const dailyCount = parseInt(document.getElementById('dailyCount').value) || 0;
+            
+            if (startDate && endDate && dailyCount > 0) {{
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                const timeDiff = end.getTime() - start.getTime();
+                const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
+                const totalCount = dayDiff * dailyCount;
+                
+                document.getElementById('previewText').textContent = `${{dayDiff}}일 × ${{dailyCount}}개 = 총 ${{totalCount}}개 영수증`;
+            }} else {{
+                document.getElementById('previewText').textContent = '날짜를 선택하면 총 생성 개수가 표시됩니다.';
+            }}
+        }}
+
+        // 날짜 및 개수 변경시 미리보기 업데이트
+        ['startDate', 'endDate', 'dailyCount'].forEach(id => {{
+            document.getElementById(id).addEventListener('change', updatePreview);
+        }});
+
         async function fetchMenuData() {{
             const placeUrl = document.getElementById('placeUrl').value;
             if (!placeUrl) {{
@@ -633,6 +807,7 @@ def admin_page():
                 if (data.success) {{
                     document.getElementById('storeName').value = data.store_name;
                     document.getElementById('menuText').value = data.menu_text;
+                    updateMenuCount();
                     alert(`메뉴 ${{data.total_count}}개를 성공적으로 추출했습니다!`);
                 }} else {{
                     alert(`오류: ${{data.error}}`);
@@ -642,18 +817,38 @@ def admin_page():
             }}
         }}
 
-        document.getElementById('receiptForm').onsubmit = async function(e) {{
-            e.preventDefault();
-            
+        function updateMenuCount() {{
+            const menuText = document.getElementById('menuText').value.trim();
+            const lines = menuText.split('\\n').filter(line => line.trim());
+            document.getElementById('menuCount').textContent = lines.length;
+        }}
+
+        document.getElementById('menuText').addEventListener('input', updateMenuCount);
+
+        async function generateReceipts() {{
             const formData = {{
                 store_name: document.getElementById('storeName').value,
+                biz_num: document.getElementById('bizNum').value,
+                owner_name: document.getElementById('ownerName').value,
+                phone: document.getElementById('phone').value,
+                address: document.getElementById('address').value,
                 menu_text: document.getElementById('menuText').value,
-                receipt_count: parseInt(document.getElementById('receiptCount').value),
-                date_range: parseInt(document.getElementById('dateRange').value)
+                start_date: document.getElementById('startDate').value,
+                end_date: document.getElementById('endDate').value,
+                daily_count: parseInt(document.getElementById('dailyCount').value),
+                start_hour: parseInt(document.getElementById('startHour').value),
+                end_hour: parseInt(document.getElementById('endHour').value),
+                apply_filter: document.getElementById('applyMenuFilter').checked
             }};
 
+            // 필수 필드 검증
+            if (!formData.store_name || !formData.biz_num || !formData.owner_name || !formData.phone || !formData.address || !formData.menu_text || !formData.start_date || !formData.end_date) {{
+                alert('모든 필수 항목을 입력해주세요.');
+                return;
+            }}
+
             try {{
-                const response = await fetch('/admin/api/generate-receipts', {{
+                const response = await fetch('/admin/api/generate-receipts-full', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify(formData)
@@ -668,7 +863,12 @@ def admin_page():
                     a.click();
                     window.URL.revokeObjectURL(url);
 
-                    document.getElementById('receiptResultText').innerHTML = `<strong>${{formData.receipt_count}}개</strong>의 영수증이 생성되어 다운로드되었습니다.`;
+                    const start = new Date(formData.start_date);
+                    const end = new Date(formData.end_date);
+                    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+                    const total = days * formData.daily_count;
+                    
+                    document.getElementById('receiptResultText').innerHTML = `<strong>${{total}}개</strong>의 영수증이 생성되어 다운로드되었습니다.`;
                     document.getElementById('receiptResult').style.display = 'block';
                 }} else {{
                     const error = await response.json();
@@ -677,7 +877,7 @@ def admin_page():
             }} catch (error) {{
                 alert(`오류: ${{error.message}}`);
             }}
-        }};
+        }}
     </script>
 </body>
 </html>""")
@@ -2448,6 +2648,105 @@ async def generate_receipts(request: Request):
             count=receipt_count,
             date_range_days=date_range
         )
+        
+        # ZIP 파일 생성
+        zip_buffer = create_receipts_zip(receipts)
+        
+        # 임시 파일로 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+            tmp_file.write(zip_buffer.getvalue())
+            tmp_file_path = tmp_file.name
+        
+        return FileResponse(
+            path=tmp_file_path,
+            filename=f"receipts_{store_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            media_type='application/zip'
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"영수증 생성 오류: {str(e)}")
+
+@app.post("/admin/api/generate-receipts-full")
+async def generate_receipts_full(request: Request):
+    """완전한 영수증 생성 API (날짜 범위, 업체 정보 포함)"""
+    # 관리자 확인
+    username = request.cookies.get('username')
+    if username != 'admin':
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+    
+    data = await request.json()
+    
+    # 필수 데이터 추출
+    store_name = data.get('store_name', '').strip()
+    biz_num = data.get('biz_num', '').strip()
+    owner_name = data.get('owner_name', '').strip()
+    phone = data.get('phone', '').strip()
+    address = data.get('address', '').strip()
+    menu_text = data.get('menu_text', '').strip()
+    start_date = data.get('start_date')
+    end_date = data.get('end_date')
+    daily_count = data.get('daily_count', 5)
+    start_hour = data.get('start_hour', 11)
+    end_hour = data.get('end_hour', 21)
+    apply_filter = data.get('apply_filter', True)
+    
+    if not all([store_name, biz_num, owner_name, phone, address, menu_text, start_date, end_date]):
+        raise HTTPException(status_code=400, detail="모든 필수 항목을 입력해주세요")
+    
+    try:
+        from datetime import datetime, timedelta
+        import random
+        
+        # 메뉴 파싱
+        menu_pool = parse_menu_input(menu_text, apply_filter=apply_filter)
+        
+        if not menu_pool:
+            raise HTTPException(status_code=400, detail="유효한 메뉴 정보를 찾을 수 없습니다")
+        
+        # 날짜 범위 계산
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        receipts = []
+        current_date = start_dt
+        
+        while current_date <= end_dt:
+            for _ in range(daily_count):
+                # 랜덤 시간 생성
+                hour = random.randint(start_hour, end_hour)
+                minute = random.randint(0, 59)
+                receipt_datetime = current_date.replace(hour=hour, minute=minute)
+                
+                # 랜덤 메뉴 선택
+                selected_menus = random.sample(menu_pool, min(random.randint(1, 3), len(menu_pool)))
+                total_amount = sum(price for _, price in selected_menus)
+                
+                # 영수증 이미지 생성 (업체 정보 포함)
+                receipt_img = create_receipt_image_full(
+                    store_name=store_name,
+                    biz_num=biz_num,
+                    owner_name=owner_name,
+                    phone=phone,
+                    address=address,
+                    menu_items=selected_menus,
+                    total_amount=total_amount,
+                    receipt_date=receipt_datetime
+                )
+                
+                # 이미지를 바이트로 변환
+                img_byte_arr = io.BytesIO()
+                receipt_img.save(img_byte_arr, format='PNG')
+                img_byte_arr.seek(0)
+                
+                receipts.append({
+                    'filename': f'receipt_{receipt_datetime.strftime("%Y%m%d_%H%M%S")}_{len(receipts)+1:03d}.png',
+                    'image_data': img_byte_arr.getvalue(),
+                    'date': receipt_datetime,
+                    'total': total_amount,
+                    'menus': selected_menus
+                })
+            
+            current_date += timedelta(days=1)
         
         # ZIP 파일 생성
         zip_buffer = create_receipts_zip(receipts)

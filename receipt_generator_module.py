@@ -201,6 +201,93 @@ def generate_receipts_batch_web(store_name, menu_pool, count=10, date_range_days
     
     return receipts
 
+def create_receipt_image_full(store_name, biz_num, owner_name, phone, address, menu_items, total_amount, receipt_date):
+    """완전한 업체 정보가 포함된 영수증 이미지 생성"""
+    # 이미지 크기 설정 (더 큰 사이즈)
+    width, height = 500, 800
+    img = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(img)
+    
+    # 폰트 설정
+    try:
+        if ensure_font():
+            font_large = ImageFont.truetype(font_path, 24)
+            font_medium = ImageFont.truetype(font_path, 18)
+            font_small = ImageFont.truetype(font_path, 14)
+            font_tiny = ImageFont.truetype(font_path, 12)
+        else:
+            font_large = ImageFont.load_default()
+            font_medium = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+            font_tiny = ImageFont.load_default()
+    except:
+        font_large = ImageFont.load_default()
+        font_medium = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+        font_tiny = ImageFont.load_default()
+    
+    y_pos = 30
+    
+    # 상호명 (크게)
+    draw.text((width//2, y_pos), store_name, font=font_large, anchor="mt", fill='black')
+    y_pos += 40
+    
+    # 사업자번호
+    draw.text((width//2, y_pos), f"사업자번호: {biz_num}", font=font_small, anchor="mt", fill='black')
+    y_pos += 25
+    
+    # 대표자명
+    draw.text((width//2, y_pos), f"대표자: {owner_name}", font=font_small, anchor="mt", fill='black')
+    y_pos += 25
+    
+    # 전화번호
+    draw.text((width//2, y_pos), f"전화: {phone}", font=font_small, anchor="mt", fill='black')
+    y_pos += 25
+    
+    # 주소 (여러 줄 처리)
+    address_lines = [address[i:i+25] for i in range(0, len(address), 25)]
+    for line in address_lines:
+        draw.text((width//2, y_pos), line, font=font_tiny, anchor="mt", fill='black')
+        y_pos += 20
+    
+    # 구분선
+    y_pos += 20
+    draw.line([(30, y_pos), (width-30, y_pos)], fill='black', width=2)
+    y_pos += 30
+    
+    # 메뉴 항목들
+    for menu_name, price in menu_items:
+        draw.text((40, y_pos), menu_name, font=font_medium, fill='black')
+        draw.text((width-40, y_pos), f"{price:,}원", font=font_medium, anchor="rt", fill='black')
+        y_pos += 30
+    
+    # 구분선
+    y_pos += 20
+    draw.line([(30, y_pos), (width-30, y_pos)], fill='black', width=2)
+    y_pos += 30
+    
+    # 총액 (강조)
+    draw.text((40, y_pos), "합계", font=font_large, fill='black')
+    draw.text((width-40, y_pos), f"{total_amount:,}원", font=font_large, anchor="rt", fill='black')
+    y_pos += 50
+    
+    # 결제 정보
+    card_company, card_number = generate_random_card_info()
+    draw.text((40, y_pos), f"결제: {card_company}", font=font_small, fill='black')
+    y_pos += 25
+    draw.text((40, y_pos), f"카드번호: {card_number}", font=font_small, fill='black')
+    y_pos += 25
+    
+    # 날짜/시간
+    draw.text((40, y_pos), f"결제일시: {receipt_date.strftime('%Y-%m-%d %H:%M:%S')}", font=font_small, fill='black')
+    y_pos += 25
+    
+    # 영수증 번호
+    receipt_num = generate_random_receipt_number()
+    draw.text((40, y_pos), f"영수증번호: {receipt_num}", font=font_small, fill='black')
+    
+    return remove_image_metadata(img)
+
 def create_receipts_zip(receipts):
     """영수증들을 ZIP 파일로 생성"""
     zip_buffer = io.BytesIO()
