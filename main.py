@@ -2883,10 +2883,7 @@ async def generate_receipts(request: Request):
 @app.post("/admin/api/generate-receipts-full")
 async def generate_receipts_full(request: Request):
     """완전한 영수증 생성 API (날짜 범위, 업체 정보 포함)"""
-    # 권한 체크 완전 비활성화 (디버깅용)
-    username = request.cookies.get('username')
-    print(f"DEBUG: 쿠키에서 읽은 username: {username}")
-    print("DEBUG: 권한 체크 비활성화됨 (테스트용)")
+    print("DEBUG: 영수증 생성 API 호출됨 - 권한 체크 없음")
     
     data = await request.json()
     
