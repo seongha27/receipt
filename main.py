@@ -13,10 +13,10 @@ import zipfile
 from typing import List, Optional
 from werkzeug.utils import secure_filename
 
-# 영수증생성기 모듈 import
-from receipt_generator_module import (
+# 영수증생성기 모듈 import (수정된 버전)
+from receipt_generator_fixed import (
     parse_menu_input, generate_receipts_batch_web, 
-    create_receipts_zip, smart_filter_menu
+    smart_filter_menu
 )
 from naver_scraper_full import get_naver_place_menu, format_menu_for_textarea
 from excel_parser import parse_excel_file

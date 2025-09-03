@@ -11,23 +11,8 @@ from pathlib import Path
 import tempfile
 import zipfile
 
-# 폰트 경로 설정 (여러 경로 지원)
-font_paths = [
-    str(Path(__file__).parent / "fonts" / "NanumGothic.ttf"),
-    str(Path(__file__).parent / "static" / "NanumGothic.ttf"),
-    "fonts/NanumGothic.ttf",
-    "static/NanumGothic.ttf"
-]
-
-# 존재하는 폰트 경로 찾기
-font_path = None
-for path in font_paths:
-    if os.path.exists(path):
-        font_path = path
-        break
-
-if not font_path:
-    font_path = font_paths[0]  # 기본값
+# 폰트 경로 설정 (원본과 동일)
+font_path = str(Path(__file__).parent / "static" / "NanumGothic.ttf")
 
 # 기기 목록
 DEVICE_LIST = [
@@ -45,49 +30,12 @@ CARD_PREFIXES = {
 }
 
 def ensure_font():
-    """폰트 파일 존재 확인"""
-    if font_path and os.path.exists(font_path):
-        print(f"폰트 파일 확인: {font_path}")
-        return True
-    else:
-        print(f"폰트 파일을 찾을 수 없습니다: {font_path}")
-        return False
+    if not os.path.exists(font_path):
+        raise FileNotFoundError(f"폰트 파일을 찾을 수 없습니다: {font_path}")
 
-def safe_text_draw(draw, position, text, font, fill='black', anchor=None):
-    """안전한 텍스트 그리기 - 한글 인코딩 처리"""
-    try:
-        # 텍스트를 명시적으로 UTF-8로 처리
-        text_str = str(text)
-        
-        # 한글이 포함된 경우 폰트 검증
-        if any(ord(char) > 127 for char in text_str):
-            # 한글이 있으면 반드시 트루타입 폰트 사용
-            if ensure_font():
-                korean_font = ImageFont.truetype(font_path, size=getattr(font, 'size', 14))
-            else:
-                # 폰트 파일이 없으면 기본 폰트 사용하되 ASCII만 출력
-                text_str = ''.join(char if ord(char) < 128 else '?' for char in text_str)
-                korean_font = ImageFont.load_default()
-        else:
-            korean_font = font
-        
-        if anchor:
-            draw.text(position, text_str, font=korean_font, fill=fill, anchor=anchor)
-        else:
-            draw.text(position, text_str, font=korean_font, fill=fill)
-            
-    except Exception as e:
-        print(f"텍스트 그리기 오류: {e}")
-        # ASCII만 추출해서 그리기
-        try:
-            ascii_text = ''.join(char if ord(char) < 128 else '?' for char in str(text))
-            default_font = ImageFont.load_default()
-            if anchor:
-                draw.text(position, ascii_text, font=default_font, fill=fill, anchor=anchor)
-            else:
-                draw.text(position, ascii_text, font=default_font, fill=fill)
-        except Exception as e2:
-            print(f"ASCII 변환도 실패: {e2}")
+ensure_font()
+
+# safe_text_draw 제거 - 원본과 동일하게 단순한 draw.text 사용
 
 def smart_filter_menu(menu_name, max_length=7):
     """메뉴명을 7글자 이하로 필터링"""
@@ -168,7 +116,7 @@ def create_receipt_image(store_name, menu_items, total_amount, receipt_date=None
     y_pos = 20
     
     # 상호명
-    safe_text_draw(draw, (width//2, y_pos), store_name, font_large, anchor="mt")
+    draw.text((width//2, y_pos), store_name, font_large, anchor="mt")
     y_pos += 40
     
     # 구분선
@@ -177,8 +125,8 @@ def create_receipt_image(store_name, menu_items, total_amount, receipt_date=None
     
     # 메뉴 항목들
     for menu_name, price in menu_items:
-        safe_text_draw(draw, (30, y_pos), menu_name, font_medium)
-        safe_text_draw(draw, (width-30, y_pos), f"{price:,}원", font_medium, anchor="rt")
+        draw.text((30, y_pos), menu_name, font_medium)
+        draw.text((width-30, y_pos), f"{price:,}원", font_medium, anchor="rt")
         y_pos += 25
     
     # 구분선
@@ -187,24 +135,24 @@ def create_receipt_image(store_name, menu_items, total_amount, receipt_date=None
     y_pos += 20
     
     # 총액
-    safe_text_draw(draw, (30, y_pos), "합계", font_large)
-    safe_text_draw(draw, (width-30, y_pos), f"{total_amount:,}원", font_large, anchor="rt")
+    draw.text((30, y_pos), "합계", font_large)
+    draw.text((width-30, y_pos), f"{total_amount:,}원", font_large, anchor="rt")
     y_pos += 40
     
     # 결제 정보
     card_company, card_number = generate_random_card_info()
-    safe_text_draw(draw, (30, y_pos), f"카드: {card_company}", font_small)
+    draw.text((30, y_pos), f"카드: {card_company}", font_small)
     y_pos += 20
-    safe_text_draw(draw, (30, y_pos), f"번호: {card_number}", font_small)
+    draw.text((30, y_pos), f"번호: {card_number}", font_small)
     y_pos += 20
     
     # 날짜/시간
-    safe_text_draw(draw, (30, y_pos), f"일시: {receipt_date.strftime('%Y-%m-%d %H:%M:%S')}", font_small)
+    draw.text((30, y_pos), f"일시: {receipt_date.strftime('%Y-%m-%d %H:%M:%S')}", font_small)
     y_pos += 20
     
     # 영수증 번호
     receipt_num = generate_random_receipt_number()
-    safe_text_draw(draw, (30, y_pos), f"영수증번호: {receipt_num}", font_small)
+    draw.text((30, y_pos), f"영수증번호: {receipt_num}", font_small)
     
     return img
 
@@ -266,53 +214,38 @@ def generate_receipts_batch_web(store_info, menu_pool, start_date, end_date, dai
     return receipts
 
 def create_receipt_image_full(store_name, biz_num, owner_name, phone, address, menu_items, total_amount, receipt_date):
-    """완전한 업체 정보가 포함된 영수증 이미지 생성"""
-    # 이미지 크기 설정 (더 큰 사이즈)
-    width, height = 500, 800
-    img = Image.new('RGB', (width, height), color='white')
-    draw = ImageDraw.Draw(img)
+    """완전한 업체 정보가 포함된 영수증 이미지 생성 - 원본 방식"""
+    width, height = 600, 1800  # 원본과 동일한 크기
+    image = Image.new("RGB", (width, height), (245, 245, 245))  # 원본과 동일한 배경색
+    draw = ImageDraw.Draw(image)
     
-    # 폰트 설정
-    try:
-        if ensure_font():
-            font_large = ImageFont.truetype(font_path, 24)
-            font_medium = ImageFont.truetype(font_path, 18)
-            font_small = ImageFont.truetype(font_path, 14)
-            font_tiny = ImageFont.truetype(font_path, 12)
-        else:
-            font_large = ImageFont.load_default()
-            font_medium = ImageFont.load_default()
-            font_small = ImageFont.load_default()
-            font_tiny = ImageFont.load_default()
-    except:
-        font_large = ImageFont.load_default()
-        font_medium = ImageFont.load_default()
-        font_small = ImageFont.load_default()
-        font_tiny = ImageFont.load_default()
+    # 폰트 설정 (원본과 동일)
+    font = ImageFont.truetype(font_path, 26)
+    bold_font = ImageFont.truetype(font_path, 30)
     
-    y_pos = 30
+    y = 30
     
-    # 상호명 (크게)
-    safe_text_draw(draw, (width//2, y_pos), store_name, font_large, anchor="mt")
-    y_pos += 40
+    # 헤더 (원본과 동일)
+    def draw_centered(draw, text, font_obj, y_pos, width):
+        bbox = draw.textbbox((0, 0), text, font=font_obj)
+        w = bbox[2] - bbox[0]
+        draw.text(((width - w) // 2, y_pos), text, font=font_obj, fill="black")
+        return y_pos + bbox[3] - bbox[1] + 15
     
-    # 사업자번호
-    safe_text_draw(draw, (width//2, y_pos), f"사업자번호: {biz_num}", font_small, anchor="mt")
-    y_pos += 25
+    y = draw_centered(draw, "[ 카드판매 영수증 ]", bold_font, y, width)
+    y = draw_centered(draw, "(고객용)", font, y, width)
     
-    # 대표자명
-    safe_text_draw(draw, (width//2, y_pos), f"대표자: {owner_name}", font_small, anchor="mt")
-    y_pos += 25
-    
-    # 전화번호
-    safe_text_draw(draw, (width//2, y_pos), f"전화: {phone}", font_small, anchor="mt")
-    y_pos += 25
-    
-    # 주소 (여러 줄 처리)
-    address_lines = [address[i:i+25] for i in range(0, len(address), 25)]
-    for line in address_lines:
-        safe_text_draw(draw, (width//2, y_pos), line, font_tiny, anchor="mt")
-        y_pos += 20
+    # 업체 정보 (원본과 동일)
+    for line in [
+        f"사업자번호 : {biz_num}",
+        store_name,
+        f"대표자 : {owner_name}   TEL : {phone}",
+        address,
+        f"판매시간: {receipt_date.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"영수번호: {generate_receipt_number()}"
+    ]:
+        draw.text((30, y), line, font=font, fill="black")
+        y += 40
     
     # 구분선
     y_pos += 20
@@ -321,8 +254,8 @@ def create_receipt_image_full(store_name, biz_num, owner_name, phone, address, m
     
     # 메뉴 항목들
     for menu_name, price in menu_items:
-        safe_text_draw(draw, (40, y_pos), menu_name, font_medium)
-        safe_text_draw(draw, (width-40, y_pos), f"{price:,}원", font_medium, anchor="rt")
+        draw.text((40, y_pos), menu_name, font_medium)
+        draw.text((width-40, y_pos), f"{price:,}원", font_medium, anchor="rt")
         y_pos += 30
     
     # 구분선
@@ -331,24 +264,24 @@ def create_receipt_image_full(store_name, biz_num, owner_name, phone, address, m
     y_pos += 30
     
     # 총액 (강조)
-    safe_text_draw(draw, (40, y_pos), "합계", font_large)
-    safe_text_draw(draw, (width-40, y_pos), f"{total_amount:,}원", font_large, anchor="rt")
+    draw.text((40, y_pos), "합계", font_large)
+    draw.text((width-40, y_pos), f"{total_amount:,}원", font_large, anchor="rt")
     y_pos += 50
     
     # 결제 정보
     card_company, card_number = generate_random_card_info()
-    safe_text_draw(draw, (40, y_pos), f"결제: {card_company}", font_small)
+    draw.text((40, y_pos), f"결제: {card_company}", font_small)
     y_pos += 25
-    safe_text_draw(draw, (40, y_pos), f"카드번호: {card_number}", font_small)
+    draw.text((40, y_pos), f"카드번호: {card_number}", font_small)
     y_pos += 25
     
     # 날짜/시간
-    safe_text_draw(draw, (40, y_pos), f"결제일시: {receipt_date.strftime('%Y-%m-%d %H:%M:%S')}", font_small)
+    draw.text((40, y_pos), f"결제일시: {receipt_date.strftime('%Y-%m-%d %H:%M:%S')}", font_small)
     y_pos += 25
     
     # 영수증 번호
     receipt_num = generate_random_receipt_number()
-    safe_text_draw(draw, (40, y_pos), f"영수증번호: {receipt_num}", font_small)
+    draw.text((40, y_pos), f"영수증번호: {receipt_num}", font_small)
     
     return remove_image_metadata(img)
 
