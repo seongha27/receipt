@@ -13,12 +13,10 @@ import zipfile
 from typing import List, Optional
 from werkzeug.utils import secure_filename
 
-# 영수증생성기 모듈 import (안정성 우선 - 기존 방식)
-from receipt_generator_module import (
-    create_receipts_zip, smart_filter_menu, create_receipt_image_full
-)
-from receipt_generator_fixed import (
-    parse_menu_input
+# 영수증생성기 모듈 import (완전 원본)
+from receipt_generator_original import (
+    parse_menu_input, generate_receipts_batch_web, 
+    smart_filter_menu, draw_receipt
 )
 from naver_scraper_full import get_naver_place_menu, format_menu_for_textarea
 from excel_parser import parse_excel_file
@@ -2913,6 +2911,8 @@ async def generate_receipts_full(request: Request):
         from datetime import datetime, timedelta
         import random
         
+        print("DEBUG: 영수증 생성 API 시작")
+        
         # 업체 정보 구성 (새로운 방식)
         store_info = {
             '상호명': store_name,
@@ -2923,7 +2923,9 @@ async def generate_receipts_full(request: Request):
         }
         
         # 메뉴 파싱
+        print(f"DEBUG: 메뉴 텍스트 파싱 시작: {menu_text[:100]}...")
         menu_pool = parse_menu_input(menu_text, apply_filter=apply_filter)
+        print(f"DEBUG: 파싱된 메뉴 수: {len(menu_pool)}")
         
         if not menu_pool:
             raise HTTPException(status_code=400, detail="유효한 메뉴 정보를 찾을 수 없습니다")
@@ -2947,29 +2949,22 @@ async def generate_receipts_full(request: Request):
                 selected_menus = random.sample(menu_pool, min(random.randint(1, 3), len(menu_pool)))
                 total_amount = sum(price for _, price in selected_menus)
                 
-                # 기존의 단순한 영수증 생성 방식 사용
-                receipt_img = create_receipt_image_full(
-                    store_name, biz_num, owner_name, phone, address,
-                    selected_menus, total_amount, receipt_datetime
-                )
-                
-                # 이미지를 바이트로 변환
-                img_byte_arr = io.BytesIO()
-                receipt_img.save(img_byte_arr, format='PNG')
-                img_byte_arr.seek(0)
-                
-                receipts.append({
-                    'filename': f'receipt_{receipt_datetime.strftime("%Y%m%d_%H%M%S")}_{len(receipts)+1:03d}.png',
-                    'image_data': img_byte_arr.getvalue(),
-                    'date': receipt_datetime,
-                    'total': total_amount,
-                    'menus': selected_menus
-                })
-            
-            current_date += timedelta(days=1)
+        # 원본 방식 그대로 사용
+        print(f"DEBUG: generate_receipts_batch_web 호출")
+        receipt_results = generate_receipts_batch_web(
+            store_info, menu_pool, start_dt, end_dt, 
+            daily_count, start_hour, end_hour
+        )
+        print(f"DEBUG: 영수증 {len(receipt_results)}개 생성 완료")
         
-        # 기존 ZIP 생성 방식 사용
-        zip_buffer = create_receipts_zip(receipts)
+        # ZIP 파일 생성 (원본 방식)
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for img_data, filepath in receipt_results:
+                zip_file.writestr(filepath, img_data.getvalue())
+        
+        zip_buffer.seek(0)
+        print(f"DEBUG: ZIP 파일 생성 완료")
         
         # 임시 파일로 저장
         with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
