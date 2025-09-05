@@ -1522,6 +1522,67 @@ async def create_company(name: str = Form(), password: str = Form()):
 async def create_store(company_name: str = Form(), name: str = Form(), start_date: str = Form(""), daily_count: int = Form(1), duration_days: int = Form(30)):
     conn = sqlite3.connect(get_db_path())
     cursor = conn.cursor()
+    
+    # 중복 업체명 체크
+    cursor.execute('SELECT * FROM stores WHERE company_name = ? AND name = ?', (company_name, name))
+    existing_store = cursor.fetchone()
+    
+    if existing_store:
+        conn.close()
+        # 중복 업체 발견 시 연장 확인 페이지로 이동
+        return HTMLResponse(f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>중복 업체 감지</title>
+</head>
+<body style="font-family: Arial; background: #f5f7fa; margin: 0; padding: 20px;">
+    <div style="max-width: 600px; margin: 100px auto;">
+        <div style="background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+            <h2 style="color: #dc3545; margin-bottom: 20px; text-align: center;">⚠️ 중복된 업체명입니다</h2>
+            <p style="text-align: center; color: #666; font-size: 16px; margin-bottom: 25px;">
+                이미 등록된 업체입니다. 연장하시겠습니까?
+            </p>
+            
+            <div style="background: #f8d7da; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+                <h4 style="margin: 0 0 10px 0; color: #721c24;">📍 기존 업체 정보</h4>
+                <p style="margin: 5px 0; color: #721c24;"><strong>업체명:</strong> {existing_store[2]}</p>
+                <p style="margin: 5px 0; color: #721c24;"><strong>고객사:</strong> {existing_store[1]}</p>
+                <p style="margin: 5px 0; color: #721c24;"><strong>시작일:</strong> {existing_store[3] or '미설정'}</p>
+                <p style="margin: 5px 0; color: #721c24;"><strong>현재 설정:</strong> 일 {existing_store[4] or 1}개 × {existing_store[5] or 30}일 = {(existing_store[4] or 1) * (existing_store[5] or 30)}개</p>
+            </div>
+            
+            <form action="/extend-store-from-duplicate" method="post" style="margin-bottom: 15px;">
+                <input type="hidden" name="company_name" value="{company_name}">
+                <input type="hidden" name="store_name" value="{name}">
+                <input type="hidden" name="new_start_date" value="{start_date}">
+                <input type="hidden" name="new_daily_count" value="{daily_count}">
+                <input type="hidden" name="new_duration_days" value="{duration_days}">
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #555;">연장 설정</label>
+                    <div style="background: #e8f5e8; padding: 15px; border-radius: 8px;">
+                        <p style="margin: 5px 0; color: #155724;"><strong>연장 설정:</strong> 일 {daily_count}개 × {duration_days}일 = {daily_count * duration_days}개</p>
+                        <p style="margin: 5px 0; color: #155724;"><strong>새로운 총 목표:</strong> {(existing_store[4] or 1) * (existing_store[5] or 30) + daily_count * duration_days}개</p>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 15px; justify-content: center;">
+                    <button type="submit" style="padding: 15px 25px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                        ✅ 연장하기
+                    </button>
+                    <a href="/admin" style="padding: 15px 25px; background: #6c757d; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: 600; text-align: center;">
+                        ❌ 취소
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>""")
+    
+    # 중복이 없으면 정상 등록
     cursor.execute('INSERT INTO stores (company_name, name, start_date, daily_count, duration_days) VALUES (?, ?, ?, ?, ?)',
                   (company_name, name, start_date, daily_count, duration_days))
     conn.commit()
@@ -3210,6 +3271,35 @@ async def get_naver_menu_api(url: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/extend-store-from-duplicate")
+async def extend_store_from_duplicate(company_name: str = Form(), store_name: str = Form(), new_start_date: str = Form(""), new_daily_count: int = Form(1), new_duration_days: int = Form(30)):
+    conn = sqlite3.connect(get_db_path())
+    cursor = conn.cursor()
+    
+    # 현재 설정 가져오기
+    cursor.execute('SELECT daily_count, duration_days FROM stores WHERE company_name = ? AND name = ?', (company_name, store_name))
+    current = cursor.fetchone()
+    
+    if current:
+        # 기존 목표량 계산
+        current_total = (current[0] or 1) * (current[1] or 30)
+        # 새로 추가할 목표량 계산
+        additional_count = new_daily_count * new_duration_days
+        # 총 목표량
+        new_total = current_total + additional_count
+        
+        # 새로운 일수 계산 (기존 하루 갯수 유지)
+        new_duration = new_total // (current[0] or 1)
+        
+        # 업데이트
+        cursor.execute('UPDATE stores SET duration_days = ? WHERE company_name = ? AND name = ?', 
+                      (new_duration, company_name, store_name))
+        conn.commit()
+        print(f"중복 업체 연장: {store_name} - {current_total}개 → {new_total}개 (추가: {additional_count}개)")
+    
+    conn.close()
+    return RedirectResponse(url="/admin", status_code=302)
 
 if __name__ == "__main__":
     print("리뷰 관리 시스템 + 영수증 생성기")
