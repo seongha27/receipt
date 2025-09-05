@@ -137,6 +137,26 @@ backup_database()  # 백업 생성
 init_db()         # 데이터베이스 초기화 (기존 데이터 보존)
 check_data_integrity()  # 데이터 무결성 체크
 
+def fix_existing_store_calculations():
+    """기존 업체의 잘못된 계산값들을 수정"""
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cursor = conn.cursor()
+        
+        # 아델라실버케어 업체의 올바른 값으로 수정 (임시 처리)
+        cursor.execute('SELECT daily_count, duration_days FROM stores WHERE name = "아델라실버케어"')
+        result = cursor.fetchone()
+        if result and (result[0] * result[1] < 40):  # 현재 값이 40개 미만이면 수정
+            cursor.execute('UPDATE stores SET daily_count = 50, duration_days = 1 WHERE name = "아델라실버케어"')
+            conn.commit()
+            print("아델라실버케어 업체 목표량 수정: 50개")
+        
+        conn.close()
+    except Exception as e:
+        print(f"기존 업체 값 수정 실패: {e}")
+
+fix_existing_store_calculations()  # 기존 데이터 수정
+
 @app.get("/")
 def home():
     return HTMLResponse("""
@@ -2385,11 +2405,9 @@ async def submit_extend(store_name: str = Form(), company_name: str = Form(), ad
         current_total = (current[0] or 1) * (current[1] or 30)
         new_total = current_total + additional_count
         
-        # 새로운 일수 계산 (하루 갯수는 유지)
-        new_duration = new_total // (current[0] or 1)
-        
-        cursor.execute('UPDATE stores SET duration_days = ? WHERE company_name = ? AND name = ?', 
-                      (new_duration, company_name, store_name))
+        # 새로운 설정: daily_count를 new_total로, duration_days를 1로 설정 (정확한 계산을 위해)
+        cursor.execute('UPDATE stores SET daily_count = ?, duration_days = ? WHERE company_name = ? AND name = ?', 
+                      (new_total, 1, company_name, store_name))
         conn.commit()
     
     conn.close()
@@ -2485,11 +2503,9 @@ async def submit_extend_admin(store_name: str = Form(), company_name: str = Form
         current_total = (current[0] or 1) * (current[1] or 30)
         new_total = current_total + additional_count
         
-        # 새로운 일수 계산 (하루 갯수는 유지)
-        new_duration = new_total // (current[0] or 1)
-        
-        cursor.execute('UPDATE stores SET duration_days = ? WHERE company_name = ? AND name = ?', 
-                      (new_duration, company_name, store_name))
+        # 새로운 설정: daily_count를 new_total로, duration_days를 1로 설정 (정확한 계산을 위해)
+        cursor.execute('UPDATE stores SET daily_count = ?, duration_days = ? WHERE company_name = ? AND name = ?', 
+                      (new_total, 1, company_name, store_name))
         conn.commit()
         print(f"업체 연장: {store_name} - {current_total}개 → {new_total}개 (사유: {extend_reason})")
     
@@ -3348,12 +3364,9 @@ async def extend_store_from_duplicate(company_name: str = Form(), store_name: st
         # 총 목표량
         new_total = current_total + additional_count
         
-        # 새로운 일수 계산 (기존 하루 갯수 유지)
-        new_duration = new_total // (current[0] or 1)
-        
-        # 업데이트
-        cursor.execute('UPDATE stores SET duration_days = ? WHERE company_name = ? AND name = ?', 
-                      (new_duration, company_name, store_name))
+        # 새로운 설정: daily_count를 new_total로, duration_days를 1로 설정 (정확한 계산을 위해)
+        cursor.execute('UPDATE stores SET daily_count = ?, duration_days = ? WHERE company_name = ? AND name = ?', 
+                      (new_total, 1, company_name, store_name))
         conn.commit()
         print(f"중복 업체 연장: {store_name} - {current_total}개 → {new_total}개 (추가: {additional_count}개)")
     
