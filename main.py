@@ -252,16 +252,39 @@ def admin_page():
             except:
                 end_date = ''
         
-        stores_html += f'''<div style="padding: 12px; border-bottom: 1px solid #eee;">
+        # 해당 업체의 완료된 리뷰 개수 계산
+        completed_reviews = len([r for r in reviews if r[1] == s[2] and r[5] == 'completed'])
+        total_reviews = len([r for r in reviews if r[1] == s[2]])
+        target_count = (s[4] or 1) * (s[5] or 30)
+        
+        # 진행률 계산
+        progress_percentage = round((completed_reviews / target_count) * 100) if target_count > 0 else 0
+        
+        # 상태에 따른 색상
+        if completed_reviews >= target_count:
+            status_color = '#28a745'
+            status_text = '✅ 완료'
+        elif completed_reviews > 0:
+            status_color = '#007bff'
+            status_text = '🔄 진행중'
+        else:
+            status_color = '#6c757d'
+            status_text = '⏸️ 대기중'
+        
+        stores_html += f'''<div style="padding: 15px; border-bottom: 1px solid #eee; background: {('#f8f9fa' if completed_reviews >= target_count else 'white')};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <strong style="color: #333;">{s[2]}</strong>
                     <span style="margin-left: 10px; padding: 3px 8px; background: #e3f2fd; color: #1565c0; border-radius: 10px; font-size: 11px;">{s[1]}</span>
+                    <span style="margin-left: 8px; padding: 3px 8px; background: {status_color}; color: white; border-radius: 10px; font-size: 11px;">{status_text}</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
                     <div style="text-align: right; font-size: 12px; color: #666;">
-                        목표: {(s[4] or 1) * (s[5] or 30)}개<br>
-                        {s[3]} ~ {end_date}
+                        <div style="margin-bottom: 4px;">
+                            <strong style="color: #333;">진행: {completed_reviews}/{target_count}개 ({progress_percentage}%)</strong>
+                        </div>
+                        <div>등록된 리뷰: {total_reviews}개</div>
+                        <div>{s[3]} ~ {end_date}</div>
                     </div>
                     <a href="/extend-store-admin/{s[1]}/{s[2]}" style="padding: 4px 8px; background: #ffc107; color: #333; text-decoration: none; border-radius: 3px; font-size: 11px; margin-right: 5px;">🔄 연장</a>
                     <a href="/delete-store/{s[0]}" onclick="return confirm('업체를 삭제하시겠습니까? 관련 배정과 리뷰도 함께 삭제됩니다.')" style="padding: 4px 8px; background: #dc3545; color: white; text-decoration: none; border-radius: 3px; font-size: 11px;">🗑️</a>
@@ -1728,7 +1751,7 @@ def reviewer_page(reviewer_name: str):
         if my_store_reviews >= target_count:
             # 완료된 업체
             completed_stores_html += f'''
-            <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #28a745;">
+            <div class="store-card" data-store="{s[2].lower()}" style="background: #d4edda; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #28a745;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <h4 style="margin: 0; color: #333; font-size: 16px;">{s[2]}</h4>
@@ -1741,7 +1764,7 @@ def reviewer_page(reviewer_name: str):
             # 진행중 업체
             percentage = round((my_store_reviews / target_count) * 100) if target_count > 0 else 0
             active_stores_html += f'''
-            <div style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #007bff;">
+            <div class="store-card" data-store="{s[2].lower()}" style="background: #e3f2fd; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid #007bff;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <div>
                         <h4 style="margin: 0; color: #333; font-size: 18px;">{s[2]}</h4>
@@ -1778,7 +1801,7 @@ def reviewer_page(reviewer_name: str):
             status_text = '완료' if r[5] == 'completed' else '대기중' if r[5] == 'pending' else '실패'
             
             reviews_table += f'''
-                <tr>
+                <tr class="review-row" data-store="{r[1].lower()}">
                     <td style="padding: 10px; border: 1px solid #ddd; font-weight: 600;">{r[1]}</td>
                     <td style="padding: 10px; border: 1px solid #ddd; font-size: 11px;"><a href="{r[2]}" target="_blank" style="color: #007bff;">{r[2][:30]}...</a></td>
                     <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">{r[3] or (r[5] == 'pending' and '추출 대기중' or '-')}</td>
@@ -1796,6 +1819,31 @@ def reviewer_page(reviewer_name: str):
 <head>
     <meta charset="UTF-8">
     <title>{reviewer_name} 리뷰어</title>
+    <script>
+        function searchStore() {{
+            const searchTerm = document.getElementById('storeSearch').value.toLowerCase();
+            const storeCards = document.querySelectorAll('.store-card');
+            const reviewRows = document.querySelectorAll('.review-row');
+            
+            storeCards.forEach(card => {{
+                const storeName = card.dataset.store;
+                if (!searchTerm || storeName.includes(searchTerm)) {{
+                    card.style.display = 'block';
+                }} else {{
+                    card.style.display = 'none';
+                }}
+            }});
+            
+            reviewRows.forEach(row => {{
+                const storeName = row.dataset.store;
+                if (!searchTerm || storeName.includes(searchTerm)) {{
+                    row.style.display = 'table-row';
+                }} else {{
+                    row.style.display = 'none';
+                }}
+            }});
+        }}
+    </script>
 </head>
 <body style="font-family: Arial; background: #f5f7fa; margin: 0; padding: 20px;">
     <div style="max-width: 1000px; margin: 0 auto;">
@@ -1803,6 +1851,17 @@ def reviewer_page(reviewer_name: str):
             <h1 style="margin: 0 0 10px 0; font-size: 2.2rem;">👤 {reviewer_name}</h1>
             <p style="margin: 0; opacity: 0.9;">배정된 업체의 리뷰 URL 등록</p>
             <a href="/" style="margin-top: 15px; display: inline-block; color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 20px;">로그아웃</a>
+        </div>
+        
+        <!-- 검색 기능 -->
+        <div style="background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 25px; margin-bottom: 25px;">
+            <h3 style="margin-bottom: 15px; color: #333;">🔍 업체 검색</h3>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <input id="storeSearch" type="text" placeholder="업체명을 입력하세요..." onkeyup="searchStore()" 
+                       style="flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px;">
+                <button onclick="document.getElementById('storeSearch').value=''; searchStore();" 
+                        style="padding: 12px 20px; background: #6c757d; color: white; border: none; border-radius: 8px; cursor: pointer;">초기화</button>
+            </div>
         </div>
         
         <!-- 진행중 업체 -->
